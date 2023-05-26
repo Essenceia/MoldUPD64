@@ -4,5 +4,6 @@
 !*.vh
 !*.sby
 !*.md
-!doc/**
+!*.pdf
+!doc
 !formal
