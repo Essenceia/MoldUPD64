@@ -1,0 +1,30 @@
+[tasks]
+basic bmc
+nofullskip prove
+cover
+noverific cover
+basic cover : default
+
+[options]
+cover:
+mode cover
+--
+prove:
+mode prove
+--
+bmc: 
+mode bmc
+--
+
+[engines]
+smtbmc boolector 
+
+[script]
+nofullskip: read
+noverific: read -noverific
+read -formal countdown.v
+hierarchy -check -top countdown
+prep -top countdown
+
+[files]
+countdown.v
