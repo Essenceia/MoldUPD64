@@ -1,3 +1,12 @@
+/* Copyright (c) 2023, Julia Desmazes. All rights reserved.
+ * 
+ * This work is licensed under the Creative Commons Attribution-NonCommercial
+ * 4.0 International License. 
+ * 
+ * This code is provided "as is" without any express or implied warranties.
+ * 
+ * For purchasing a commertial license contact : julia.desmazes@gmail.com  */ 
+
 // ModlUPD64 receiver
 module receiver #(
 	parameter P_W = 800, // packed width

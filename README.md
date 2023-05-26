@@ -38,3 +38,8 @@ output       upd_axis_tready_i,
 - `tlast` : indicates the boundary of a packet.
 
 - `tuser` : user defined
+
+## License
+
+This code is licensed under CC BY-NC 4.0, to obtain a commercial license
+reach out to julia.desmazes@gmail.com .
