@@ -1,4 +1,4 @@
-module message_block #(
+module message #(
 	parameter LEN = 8,		
 )(
 	input raw_i,
