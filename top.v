@@ -17,6 +17,7 @@ module top #(
 	
 	output                 upd_axis_tready_o,
 );
+localparam AXI_MSG_L = AXI_DATA_W / 8;
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
 logic [ML_W-1:0] msg_cnt_next;
@@ -94,10 +95,13 @@ header m_header(
 // message and sequence tracking
 // decrement the number of bytes of the current message that have been
 // recieved
+assign msg_end = msg_len_q <= AXI_MSG_L ;
+//TODO : assign msg_len_next = init_msg_len_v ? init_msg_len :
+					
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
-						msg_end ? msg_cnt_q - ML_W'd1 : msg_cnt_q;
+					  msg_end ? msg_cnt_q - ML_W'd1 : msg_cnt_q;
 
 always @(posedge clk)
 begin
