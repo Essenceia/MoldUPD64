@@ -48,9 +48,11 @@ logic                   msg_end;
 logic                   msg_overlap;
 logic                   cnt_last;
 
+logic                  msg_valid[1:0];
 // data routing
 logic [AXI_DATA_W-1:0] msg_data [1:0];
-logic [AXI_MSG_L-1:0]  msg_shift[1:0];
+logic [AXI_DATA_W-1:0] msg_data_shifted;
+logic [AXI_MSG_L-1:0]  msg_shift; // only 1 of the 2 modules if going to call for a shift
 logic [AXI_KEEP_W-1:0] msg_mask[1:0];
 
 // FSM
@@ -116,9 +118,28 @@ header m_header(
 	.msg_cnt_o (init_msg_cnt)
 
 );
-// axi data shift
-assign msg_data[0] = {AXI_DATA_W{fsm_m0_q}} & upd_axis_tdata_q
-				   | TODO;
+
+// Data routing
+assign msg_valid[0] = fsm_h2_msg_q // first message is routed by default to m0
+					| msg_overlap
+					| fsm_m0_q; 
+assign msg_valid[1] = msg_overlap
+					| fsm_m1_q;
+
+assign msg_data[0] = {AXI_DATA_W{fsm_h2_msg_q}} & { 32'b0, upd_axis_tdata_q[63:32]} 
+				   | {AXI_DATA_W{fsm_m0_q|fsm_m0_overlap_q}} & upd_axis_tdata_q
+				   | {AXI_DATA_W{fsm_m1_overlap_q}} & msg_data_shifted;
+assign msg_data[1] = {AXI_DATA_W{fsm_m1_q}} & upd_axis_tdata_q
+				   | {AXI_DATA_W{fsm_m1_q|fsm_m1_overlap_q}} & upd_axis_tdata_q
+				   | {AXI_DATA_W{fsm_m0_overlap_q}} & msg_data_shifted;
+
+assign msg_mask[0] = {AXI_KEEP_W{fsm_h2_msg_q}} & { 4'b0, upd_axis_tkeep_q[7:0]}
+				   | {AXI_KEEP_W{fsm_m0_q}} & upd_axis_tkeep_q
+				   | {AXI_KEEP_W{fsm_m0_overlap_q}} & TODO
+				   | {AXI_KEEP_W{fsm_m1_overlap_q}} & TODO; 
+assign msg_mask[1] = {AXI_KEEP_W{fsm_m1_q}} & upd_axis_tkeep_q
+				   | {AXI_KEEP_W{fsm_m0_overlap_q}} & TODO
+				   | {AXI_KEEP_W{fsm_m1_overlap_q}} & TODO;
 
 // message and sequence tracking
 
@@ -228,7 +249,9 @@ always @(posedge clk) begin
 		a_axi_valid_tuser_known : assume( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tuser_i )));
 		// tkeep is a thermometer
 		a_axi_tkeep_thermo : assume( ~udp_axis_tvalid_i | ( upd_axis_tvalid_i & $onehot0( upd_axis_tkeep_i - AXI_KEEP_W'd1 ))); 
-		
+		// tkeep is only not only 1s on the last payload
+		a_axi_tkeep_n1s_only_tlast : assume ( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i & ~upd_axis_tlast_i & &upd_axis_tkeep_i ));
+	
 		// fsm
 		sva_fsm_onehot : assert( $onehot( fsm_f )); 
 		
