@@ -35,9 +35,9 @@ output       upd_axis_tready_i,
     Associated bytes that have the `tkeep` byte qualifier deasserted
     are null bytes and can be removed from the data stream.
 
-- `tlast` : indicates the boundary of a packet.
+- `tlast` : indicates the boundary of a packet. / End-of-frame
 
-- `tuser` : user defined
+- `tuser` : user defined / Bad frame (valid with `tlast` & `tvalid`)
 
 ## License
 

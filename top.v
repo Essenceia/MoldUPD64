@@ -27,7 +27,9 @@ module top #(
 	
 	output                 upd_axis_tready_o,
 );
-localparam AXI_MSG_L = AXI_DATA_W / 8;
+localparam AXI_MSG_L   = $clog2( AXI_DATA_W / 8 );
+localparam AXI_KEEP_LW = $clog2( AXI_KEEP_W ) + 1;
+
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
 logic [ML_W-1:0] msg_cnt_next;
@@ -37,8 +39,20 @@ reg   [ML_W-1:0] msg_len_q;
 logic [ML_W-1:0] msg_len_next;
 logic [ML_W-1:0] init_msg_len;
 logic            init_msg_len_v;
-logic        msg_end;
-logic        seq_last;
+logic [2:0]      init_msg_len_sel;
+
+logic [AXI_KEEP_LW-1:0] upd_axis_data_len; 
+logic [ML_W-1:0]        msg_len_dec;
+logic                   msg_len_zero;
+logic                   msg_end;
+logic                   msg_overlap;
+logic                   cnt_last;
+
+// data routing
+logic [AXI_DATA_W-1:0] msg_data [1:0];
+logic [AXI_MSG_L-1:0]  msg_shift[1:0];
+logic [AXI_KEEP_W-1:0] msg_mask[1:0];
+
 // FSM
 reg   fsm_invalid_q;
 logic fsm_invalid_next;
@@ -102,12 +116,38 @@ header m_header(
 	.msg_cnt_o (init_msg_cnt)
 
 );
+// axi data shift
+assign msg_data[0] = {AXI_DATA_W{fsm_m0_q}} & upd_axis_tdata_q
+				   | TODO;
+
 // message and sequence tracking
+
+// msg length based on tkeep
+cnt_ones_thermo m_cnt_ones_tkeep#(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))(
+	.data_i(upd_axis_tkeep_q),
+	.cnt_o(upd_axis_data_len)
+);
+
 // decrement the number of bytes of the current message that have been
 // recieved
-assign msg_end = msg_len_q <= AXI_MSG_L ;
-//TODO : assign msg_len_next = init_msg_len_v ? init_msg_len :
-					
+assign msg_len_zero = ~|msg_len_q;
+assign msg_end      = ( ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
+assign msg_overlap  = fsm_m1_overlap_q | fsm_m0_overlap_q;
+
+// init msg
+assign init_msg_len_sel = { msg_len_zero,   // current message len has reached zero and we are still
+					                        // expecting more messages
+					        msg_overlap,    // we have an overlap this cycle
+						    fsm_h2_msg_q};  // first message
+assign init_msg_len_v = |init_msg_len_sel; 
+assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[48:32]
+					  | { ML_W{ init_msg_len_sel[1] }} & TODO
+					  | { ML_W{ init_msg_len_sel[2] }} & ;
+ 
+assign msg_len_next = init_msg_len_v ? init_msg_len :
+					  upd_axis_tvalid_q ? msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, upd_axis_data_len } :
+					  msg_len_q;
+	
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
@@ -182,10 +222,12 @@ always @(posedge clk) begin
 		// AXI valid is never X
 		a_axi_tvalid_know : assume ( ~$isunknown( upd_axis_tvalid_i ));
 		// AXI doesn't drive X's when valid
-		a_axi_valid_tdata_known : assume( upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tdata_i )));
-		a_axi_valid_tkeep_known : assume( upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tkeep_i )));
-		a_axi_valid_tlast_known : assume( upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tlast_i )));
-		a_axi_valid_tuser_known : assume( upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tuser_i )));
+		a_axi_valid_tdata_known : assume( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tdata_i )));
+		a_axi_valid_tkeep_known : assume( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tkeep_i )));
+		a_axi_valid_tlast_known : assume( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tlast_i )));
+		a_axi_valid_tuser_known : assume( ~upd_axis_tvalid_i | ( upd_axis_tvalid_i &  ~$isunknown( upd_axis_tuser_i )));
+		// tkeep is a thermometer
+		a_axi_tkeep_thermo : assume( ~udp_axis_tvalid_i | ( upd_axis_tvalid_i & $onehot0( upd_axis_tkeep_i - AXI_KEEP_W'd1 ))); 
 		
 		// fsm
 		sva_fsm_onehot : assert( $onehot( fsm_f )); 
@@ -194,6 +236,9 @@ always @(posedge clk) begin
 		// header
 		sva_msg_cnt_init_h2 : assert ( init_msg_cnt_v == fsm_h2_msg_q);
 		sva_xcheck_msg_cnt : assert ( ~|fsm_f[7:4] | ( |fsm_f[7:4] & ~$isunknown( msg_cnt_q )));
+
+		// init msg sel should be onehot, used in mux
+		sva_init_msg_len_sel_onehot : assert ( ~init_msg_len_v | ( init_msg_len_v & $onehot( init_msg_len_sel )));
 	end
 end
 `endif

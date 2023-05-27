@@ -1,0 +1,30 @@
+[tasks]
+basic bmc
+nofullskip prove
+cover
+noverific cover
+basic cover : default
+
+[options]
+cover:
+mode cover
+--
+prove:
+mode prove
+--
+bmc: 
+mode bmc
+--
+
+[engines]
+smtbmc boolector 
+
+[script]
+nofullskip: read
+noverific: read -noverific
+read -formal cnt_ones_thermo.v
+hierarchy -check -top cnt_ones_thermo
+prep -top cnt_ones_thermo
+
+[files]
+cnt_ones_thermo.v
