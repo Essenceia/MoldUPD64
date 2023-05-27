@@ -1,7 +1,8 @@
-# ModlUPD64
+# MoldUPD64
 
-RTL implementation of a ModlUPD64 receiver. 
+RTL implementation of a MoldUPD64 receiver. 
 
+![MoldUDP packet, image source : https://www.fragmentationneeded.net/2012/01/dispatches-from-trading-floor-moldudp.html !](doc/moldupd.png)
 ## AXI stream 
 
 This module accepts upd packets via an AXI stream interface, this module
