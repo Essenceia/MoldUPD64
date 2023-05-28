@@ -7,3 +7,5 @@
 !*.pdf
 !doc
 !formal
+!tb
+!Makefile

@@ -68,6 +68,9 @@ logic [DFF_DATA_W-1:0] flop_data_q;
 logic [AXI_KEEP_LW-1:0] flop_len_next;
 logic [AXI_KEEP_LW-1:0] flop_len_q;
 
+logic [AXI_KEEP_LW-1:0] axis_msg_tdata_mask;
+logic [AXI_KEEP_LW-1:0] axis_flop_tdata_mask;
+
 logic [AXI_KEEP_LW-1:0] axis_msg_tdata_shift;
 logic [AXI_KEEP_LW-1:0] axis_flop_tdata_shift;
 
@@ -158,9 +161,9 @@ assign init_msg_len_sel = { msg_len_zero,   // current message len has reached z
 					        msg_overlap,    // we have an overlap this cycle
 						    fsm_h2_msg_q};  // first message
 assign init_msg_len_v = |init_msg_len_sel; 
-assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[47:32]
-					  | { ML_W{ init_msg_len_sel[1] }} & TODO
-					  | { ML_W{ init_msg_len_sel[2] }} & ;
+assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[47:32];
+					 /* | { ML_W{ init_msg_len_sel[1] }} & TODO
+					  | { ML_W{ init_msg_len_sel[2] }} & ;*/
  
 assign msg_len_next = init_msg_len_v ? init_msg_len :
 					  upd_axis_tvalid_q ? msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, upd_axis_data_len } :
@@ -169,7 +172,9 @@ assign msg_len_next = init_msg_len_v ? init_msg_len :
 // Message data buffering 
 // When possible we want to gather message bits into 64 bits continus chunks
 
-assign axis_msg_tdata_shift = ;
+assign axis_msg_tdata_mask = 'X ;//  msg_len_q < flop_len_q ? 
+assign axis_msg_tdata_shift = msg_len_q < flop_len_q ? msg_len_q : flop_len_q;
+
 always_comb begin
 	axis_flop_tdata_shifted = { AXI_DATA_W{ 1'bX}}; // default
 	for( int i=0; i <= DFF_DATA_LW; i++) begin
@@ -187,11 +192,11 @@ end
 // TODO : We assume that the length of the first message is not zero, verify if
 //        this assumption is true in paractice, else, add support of routing 
 //        last 2 bytes of tdata to init_len 
-assign save_data_next = { 48'b0 , 16{ fsm_h2_msg_q}} & { 48'b0 , upd_axis_tdata_q[63:48] } // init
-				     | TODO;
+assign save_data_next = { 48'b0 , 16{ fsm_h2_msg_q}} & { 48'b0 , upd_axis_tdata_q[63:48] }; // init
+				    /* | TODO; */
 				
-assign save_keep_next = { 7'b0 , fsm_h2_msg_q }
-					 | 
+assign save_keep_next = { 7'b0 , fsm_h2_msg_q };
+					/* | */
 
 assign msg_data = 
 // decrement the number of messages we are still expected to see if we have
