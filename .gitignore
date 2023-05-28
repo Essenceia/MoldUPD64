@@ -5,6 +5,7 @@
 !*.sby
 !*.md
 !*.pdf
+!*.png
 !doc
 !formal
 !tb
