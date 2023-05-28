@@ -19,16 +19,26 @@ module top #(
 	input nreset,
 	
 	// AXI stream interface from udp ethernet
-	input [AXI_DATA_W-1:0] upd_axis_tdata_i,
-	input [AXI_KEEP_W-1:0] upd_axis_tkeep_i,
 	input                  upd_axis_tvalid_i,
+	input [AXI_KEEP_W-1:0] upd_axis_tkeep_i,
+	input [AXI_DATA_W-1:0] upd_axis_tdata_i,
 	input                  upd_axis_tlast_i,
 	input                  upd_axis_tuser_i,
 	
 	output                 upd_axis_tready_o,
+
+	// Mold message
+	output                  mold_msg_v_o,
+	output                  mold_msg_start_o, // start of a new msg
+	output [ML_W-1:0]       mold_msg_len_o,
+	output [AXI_KEEP_W-1:0] mold_msg_mask_o,
+	output [AXI_DATA_W-1:0] mold_msg_data_o
 );
 localparam AXI_MSG_L   = $clog2( AXI_DATA_W / 8 );
 localparam AXI_KEEP_LW = $clog2( AXI_KEEP_W ) + 1;
+localparam DFF_DATA_W   = AXI_DATA_W - 8; // 56
+localparam DFF_DATA_LW  = $clog2( DFF_DATA_W ); // 7 
+localparam DATA_DIF_W  = AXI_DATA_W - DFF_DATA_W; // 8
 
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
@@ -48,12 +58,25 @@ logic                   msg_end;
 logic                   msg_overlap;
 logic                   cnt_last;
 
-logic                  msg_valid[1:0];
+logic                  msg_valid;
+logic [AXI_DATA_W-1:0] msg_data;
+
 // data routing
-logic [AXI_DATA_W-1:0] msg_data [1:0];
-logic [AXI_DATA_W-1:0] msg_data_shifted;
-logic [AXI_MSG_L-1:0]  msg_shift; // only 1 of the 2 modules if going to call for a shift
-logic [AXI_KEEP_W-1:0] msg_mask[1:0];
+logic [DFF_DATA_W-1:0] flop_data_next;
+logic [DFF_DATA_W-1:0] flop_data_q;
+
+logic [AXI_KEEP_LW-1:0] flop_len_next;
+logic [AXI_KEEP_LW-1:0] flop_len_q;
+
+logic [AXI_KEEP_LW-1:0] axis_msg_tdata_shift;
+logic [AXI_KEEP_LW-1:0] axis_flop_tdata_shift;
+
+// data shifted to be consumed in this cycle
+logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted;
+// data shifted to be consumed next cycle
+logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted;
+
+logic [AXI_DATA_W-1:0] msg_mask;
 
 // FSM
 reg   fsm_invalid_q;
@@ -64,14 +87,12 @@ reg   fsm_h2_msg_q;
 logic fsm_h0_next;
 logic fsm_h1_next;
 logic fsm_h2_msg_next;
-reg   fsm_m0_q;
-reg   fsm_m0_overlap_q;
-reg   fsm_m1_q;
-reg   fsm_m1_overlap_q;
-logic fsm_m0_next;
-logic fsm_m0_overlap_next;
-logic fsm_m1_next;
-logic fsm_m1_overlap_next;
+reg   fsm_msg_q;
+reg   fsm_msg_overlap_q;
+reg   fsm_msg_len_split_q;
+logic fsm_msg_next;
+logic fsm_msg_overlap_next;
+logic fsm_msg_len_split_next;
 
 // AXI 
 reg [AXI_DATA_W-1:0]   upd_axis_tdata_q;
@@ -118,29 +139,6 @@ header m_header(
 	.msg_cnt_o (init_msg_cnt)
 
 );
-
-// Data routing
-assign msg_valid[0] = fsm_h2_msg_q // first message is routed by default to m0
-					| msg_overlap
-					| fsm_m0_q; 
-assign msg_valid[1] = msg_overlap
-					| fsm_m1_q;
-
-assign msg_data[0] = {AXI_DATA_W{fsm_h2_msg_q}} & { 32'b0, upd_axis_tdata_q[63:32]} 
-				   | {AXI_DATA_W{fsm_m0_q|fsm_m0_overlap_q}} & upd_axis_tdata_q
-				   | {AXI_DATA_W{fsm_m1_overlap_q}} & msg_data_shifted;
-assign msg_data[1] = {AXI_DATA_W{fsm_m1_q}} & upd_axis_tdata_q
-				   | {AXI_DATA_W{fsm_m1_q|fsm_m1_overlap_q}} & upd_axis_tdata_q
-				   | {AXI_DATA_W{fsm_m0_overlap_q}} & msg_data_shifted;
-
-assign msg_mask[0] = {AXI_KEEP_W{fsm_h2_msg_q}} & { 4'b0, upd_axis_tkeep_q[7:0]}
-				   | {AXI_KEEP_W{fsm_m0_q}} & upd_axis_tkeep_q
-				   | {AXI_KEEP_W{fsm_m0_overlap_q}} & TODO
-				   | {AXI_KEEP_W{fsm_m1_overlap_q}} & TODO; 
-assign msg_mask[1] = {AXI_KEEP_W{fsm_m1_q}} & upd_axis_tkeep_q
-				   | {AXI_KEEP_W{fsm_m0_overlap_q}} & TODO
-				   | {AXI_KEEP_W{fsm_m1_overlap_q}} & TODO;
-
 // message and sequence tracking
 
 // msg length based on tkeep
@@ -153,7 +151,6 @@ cnt_ones_thermo m_cnt_ones_tkeep#(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))(
 // recieved
 assign msg_len_zero = ~|msg_len_q;
 assign msg_end      = ( ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
-assign msg_overlap  = fsm_m1_overlap_q | fsm_m0_overlap_q;
 
 // init msg
 assign init_msg_len_sel = { msg_len_zero,   // current message len has reached zero and we are still
@@ -161,7 +158,7 @@ assign init_msg_len_sel = { msg_len_zero,   // current message len has reached z
 					        msg_overlap,    // we have an overlap this cycle
 						    fsm_h2_msg_q};  // first message
 assign init_msg_len_v = |init_msg_len_sel; 
-assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[48:32]
+assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[47:32]
 					  | { ML_W{ init_msg_len_sel[1] }} & TODO
 					  | { ML_W{ init_msg_len_sel[2] }} & ;
  
@@ -169,6 +166,34 @@ assign msg_len_next = init_msg_len_v ? init_msg_len :
 					  upd_axis_tvalid_q ? msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, upd_axis_data_len } :
 					  msg_len_q;
 	
+// Message data buffering 
+// When possible we want to gather message bits into 64 bits continus chunks
+
+assign axis_msg_tdata_shift = ;
+always_comb begin
+	axis_flop_tdata_shifted = { AXI_DATA_W{ 1'bX}}; // default
+	for( int i=0; i <= DFF_DATA_LW; i++) begin
+	 	if (i == flop_len_q) axis_flop_tdata_shifted = { { 64-(8*i) {1'b0} },  upd_axis_tdata_q[63:(63-(8*i))] }; 
+	end
+end
+assign axis_flop_tdata_shift = ; 
+always_comb begin
+	axis_msg_tdata_shifted = { AXI_DATA_W{ 1'bX}}; // default
+	for( int i=0; i <= DFF_DATA_LW; i++) begin
+	 	if (i == flop_len_q) axis_msg_tdata_shifted = { upd_axis_tdata_q[(63-(8*i)):0], {8*i{1'b0}} }; 
+	end
+end
+
+// TODO : We assume that the length of the first message is not zero, verify if
+//        this assumption is true in paractice, else, add support of routing 
+//        last 2 bytes of tdata to init_len 
+assign save_data_next = { 48'b0 , 16{ fsm_h2_msg_q}} & { 48'b0 , upd_axis_tdata_q[63:48] } // init
+				     | TODO;
+				
+assign save_keep_next = { 7'b0 , fsm_h2_msg_q }
+					 | 
+
+assign msg_data = 
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
@@ -188,12 +213,9 @@ assign fsm_h1_next     = fsm_h0_q;
 assign fsm_h2_msg_next = fsm_h1_q; 
 
 // message
-// message can be sent over multiple message modules m0 and m1
-// mX      : denotes the module to which the start of the axi stream payload
-//           will be sent, default is m0
 // overlap : part of the next axi payload is of a different modlupd64 message
 //           it will be routed to the free moldupd64 module
-assign fsm_m0_next = fsm_h2_msg_q;
+assign fsm_msg_next = fsm_h2_msg_q;
  
 always @(posedge clk)
 begin
@@ -202,19 +224,17 @@ begin
 		fsm_h0_q         <= 1'b0;
 		fsm_h1_q         <= 1'b0;
 		fsm_h2_msg_q     <= 1'b0;
-		fsm_m0_q         <= 1'b0;
-		fsm_m0_overlap_q <= 1'b0;
-		fsm_m1_q         <= 1'b0;
-		fsm_m1_overlap_q <= 1'b0;	
+		fsm_msg_q         <= 1'b0;
+		fsm_msg_overlap_q <= 1'b0;
+		fsm_msg_len_split_q <= 1'b0;
 		end else begin
 		fsm_invalid_q    <= fsm_invalid_next; 
 		fsm_h0_q         <= fsm_h0_next;     
 		fsm_h1_q         <= fsm_h1_next;    
 		fsm_h2_msg_q     <= fsm_h2_msg_next;   
-		fsm_m0_q         <= fsm_m0_next;
-		fsm_m0_overlap_q <= fsm_m0_overlap_next;
-		fsm_m1_q         <= fsm_m1_next;
-		fsm_m1_overlap_q <= fsm_m1_overlap_next;
+		fsm_msg_q         <= fsm_msg_next;
+		fsm_msg_overlap_q   <= fsm_msg_overlap_next;
+		fsm_msg_len_split_q <= fsm_msg_len_split_next;
 	end
 end
 
@@ -225,11 +245,11 @@ assign upd_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 
 `ifdef FORMAL
 
-logic [0:7] fsm_f;
+logic [0:6] fsm_f;
 assign fsm_f = {
 	fsm_invalid_q, 
 	fsm_h0_q, fsm_h1_q, fsm_h2_msg_q,
-	fsm_m0_q, fsm_m0_overlap_q, fsm_m1_q, fsm_m1_overlap_q};
+	fsm_msg_q, fsm_msg_overlap_q, fsm_msg_len_split_q};
 
 initial begin
 	// assume
