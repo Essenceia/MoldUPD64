@@ -110,6 +110,12 @@ logic                  upd_axis_tlast_next;
 logic                  upd_axis_tuser_next;
 
 // axi payload buffering ( for timing, might replace with clk domain crossing )
+assign upd_axis_tdata_next  = upd_axis_tdata_i;  
+assign upd_axis_tkeep_next  = upd_axis_tkeep_i;
+assign upd_axis_tvalid_next = upd_axis_tvalid_i;
+assign upd_axis_tlast_next  = upd_axis_tlast_i;
+assign upd_axis_tuser_next  = upd_axis_tuser_i;
+
 always @(posedge clk) 
 begin
 	if ( ~nreset ) begin
@@ -219,6 +225,7 @@ begin
 end
 // fsm
 
+assign fsm_invalid_next = fsm_invalid_q & ~upd_axis_tvalid_i; 
 // header 
 // hX  : header is received over multiple cycles 
 // msg : during last cycle part of the packed is the begining of the message

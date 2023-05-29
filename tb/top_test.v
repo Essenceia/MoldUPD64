@@ -13,6 +13,7 @@ module top_test;
 	reg nreset = 1'b0;	
 
 	logic [MH_W-1:0]       moldudp_header;
+	logic [ML_W-1:0]       moldudp_msg_len;
 	logic                  upd_axis_tvalid_o;
 	logic [AXI_KEEP_W-1:0] upd_axis_tkeep_o;
 	logic [AXI_DATA_W-1:0] upd_axis_tdata_o;
@@ -25,6 +26,7 @@ module top_test;
 	logic [ML_W-1:0]       mold_msg_len_i;
 	logic [AXI_KEEP_W-1:0] mold_msg_mask_i;
 	logic [AXI_DATA_W-1:0] mold_msg_data_i;
+
 
 	initial
 	begin
@@ -45,19 +47,34 @@ module top_test;
 		upd_axis_tlast_o = 1'b0;
 		upd_axis_tuser_o = 1'b0;
 
-		moldudp_header[SID_W-1:0] = 'hDEADBEEF;
+		moldudp_header[SID_W-1:0] = 'd1;
 		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
 		moldudp_header[MH_W-1:MH_W-ML_W] = 'habcd;
+
+		moldudp_msg_len = 'd16;
 		/* Header 0*/
 		upd_axis_tdata_o = moldudp_header[AXI_DATA_W-1:0];
 		#10
 		/* header 1*/
 		upd_axis_tdata_o = moldudp_header[(AXI_DATA_W*2)-1:AXI_DATA_W];
 		#10
-		/* header 2*/
-		upd_axis_tdata_o = moldudp_header[MH_W-1:AXI_DATA_W*2];
-		/* msg 0 */
-		# 10
+		/* header 2 + msg 0*/
+		upd_axis_tdata_o ={ '1, moldudp_msg_len, moldudp_header[MH_W-1:AXI_DATA_W*2] };
+		#10
+		/* payload 0 of msg 0 */
+		upd_axis_tdata_o = '1;
+		#10
+		/* payload 1 of msg 0 */
+		upd_axis_tdata_o = { {32{1'bx}}, {{321'b1}}};
+		upd_axis_tlast_o = 1'b1;
+		upd_axis_tkeep_o = {4'b0, 4'hf};
+		#10
+		/* no msg */
+		upd_axis_tvalid_o = 1'b0;
+		upd_axis_tkeep_o  = 'x;
+		upd_axis_tlast_o  = 'x; 
+		upd_axis_tdata_o  = 'x;
+		#10	
 		$display("Test end");
 		$finish;
 	end
