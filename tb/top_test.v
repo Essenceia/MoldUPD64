@@ -1,7 +1,7 @@
 module top_test;
-	localparam AXI_DATA_W_ = 64;
-	localparam AXI_KEEP_W  = $clog2(AXI_DATA_W);
-	localparam LEN    = 8;
+	localparam AXI_DATA_W = 64;
+	localparam AXI_KEEP_W = AXI_DATA_W/8;
+	localparam LEN   = 8;
 	localparam ML_W  = 2*LEN;
 	localparam SID_W = 10*LEN;// session id
 	localparam SEQ_W = 8*LEN; // sequence number

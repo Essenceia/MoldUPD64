@@ -36,8 +36,8 @@ module top #(
 );
 localparam AXI_MSG_L   = $clog2( AXI_DATA_W / 8 );
 localparam AXI_KEEP_LW = $clog2( AXI_KEEP_W ) + 1;
-localparam DFF_DATA_W   = AXI_DATA_W - 8; // 56
-localparam DFF_DATA_LW  = $clog2( DFF_DATA_W ); // 7 
+localparam DFF_DATA_W  = AXI_DATA_W - 8; // 56
+localparam DFF_DATA_LW = $clog2( DFF_DATA_W ); // 7 
 localparam DATA_DIF_W  = AXI_DATA_W - DFF_DATA_W; // 8
 
 // metadata
@@ -128,7 +128,7 @@ header m_header(
 	.data_i(upd_axis_tdata_q),
 	.h0_v_i(fsm_h0_q),
 	.h1_v_i(fsm_h1_q),
-	.h1_v_i(fsm_h2_msg_q),
+	.h2_v_i(fsm_h2_msg_q),
 
 	.sid_p0_v_o(), 
 	.sid_p0_o(),
@@ -145,10 +145,8 @@ header m_header(
 // message and sequence tracking
 
 // msg length based on tkeep
-cnt_ones_thermo m_cnt_ones_tkeep #(
-	.D_W(AXI_KEEP_W),
-	.D_LW(AXI_KEEP_LW)
-)(
+cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
+	m_cnt_ones_tkeep(
 	.data_i(upd_axis_tkeep_q),
 	.cnt_o(upd_axis_data_len)
 );
@@ -156,7 +154,7 @@ cnt_ones_thermo m_cnt_ones_tkeep #(
 // decrement the number of bytes of the current message that have been
 // recieved
 assign msg_len_zero = ~|msg_len_q;
-assign msg_end      = ( ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
+assign msg_end      = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
 
 // init msg
 assign init_msg_len_sel = { msg_len_zero,   // current message len has reached zero and we are still
@@ -177,35 +175,43 @@ assign msg_len_next = init_msg_len_v ? init_msg_len :
 
 assign axis_msg_tdata_mask = 'X ;//  msg_len_q < flop_len_q ? 
 assign axis_msg_tdata_shift = msg_len_q < flop_len_q ? msg_len_q : flop_len_q;
+	
+assign axis_flop_tdata_shift = 'X; 
+
+// TODO : move declaration to top ?
+logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W-1:0];
+logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W-1:0];
+genvar j;
+generate 
+	for( j = 0; j < DFF_DATA_LW; j++) begin
+		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(63-(8*j))] }; 
+		assign axis_msg_tdata_shifted_arr[j] = { upd_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };   
+	end
+endgenerate
 
 always_comb begin
-	axis_flop_tdata_shifted = { AXI_DATA_W{ 1'bX}}; // default
-	for( int i=0; i <= DFF_DATA_LW; i++) begin
-	 	if (i == flop_len_q) axis_flop_tdata_shifted = { { 64-(8*i) {1'b0} },  upd_axis_tdata_q[63:(63-(8*i))] }; 
-	end
-end
-assign axis_flop_tdata_shift = ; 
-always_comb begin
-	axis_msg_tdata_shifted = { AXI_DATA_W{ 1'bX}}; // default
-	for( int i=0; i <= DFF_DATA_LW; i++) begin
-	 	if (i == flop_len_q) axis_msg_tdata_shifted = { upd_axis_tdata_q[(63-(8*i)):0], {8*i{1'b0}} }; 
+	axis_flop_tdata_shifted = { AXI_DATA_W{1'bX}}; // default
+	axis_msg_tdata_shifted  = { AXI_DATA_W{1'bX}}; // default
+	for( int unsigned i=0; i <= DFF_DATA_LW; i++) begin
+	 	if (i == flop_len_q) axis_flop_tdata_shifted = axis_flop_tdata_shifted_arr[i];
+	 	if (i == flop_len_q) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
 	end
 end
 
 // TODO : We assume that the length of the first message is not zero, verify if
 //        this assumption is true in paractice, else, add support of routing 
 //        last 2 bytes of tdata to init_len 
-assign save_data_next = { 48'b0 , 16{ fsm_h2_msg_q}} & { 48'b0 , upd_axis_tdata_q[63:48] }; // init
+assign save_data_next = { 48'b0 , {16{ fsm_h2_msg_q}}} & { 48'b0 , upd_axis_tdata_q[63:48] }; // init
 				    /* | TODO; */
 				
 assign save_keep_next = { 7'b0 , fsm_h2_msg_q };
 					/* | */
 
-assign msg_data = 
+assign msg_data = 'X; 
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
-					  msg_end ? msg_cnt_q - ML_W'd1 : msg_cnt_q;
+					  msg_end ? msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 } : msg_cnt_q;
 
 always @(posedge clk)
 begin

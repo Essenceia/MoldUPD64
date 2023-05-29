@@ -10,7 +10,7 @@ cnt_ones_thermo : cnt_ones_thermo.v
 header: header.v
 	iverilog ${FLAGS} -s header -o ${BUILD}/header header.v
 
-top: top.v header.v ${TB_DIR}/top_test.v
+top: top.v ${TB_DIR}/top_test.v cnt_ones_thermo header
 	iverilog ${FLAGS} -s top_test -o ${BUILD}/top cnt_ones_thermo.v header.v top.v ${TB_DIR}/top_test.v
 
 run:
