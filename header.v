@@ -8,10 +8,10 @@
  * For purchasing a commertial license contact : julia.desmazes@gmail.com  */ 
 
 module header(
-	input [63-1:0]  data_i,
+	input [63:0]    data_i,
 	input           h0_v_i, // first 64 bits of the header
 	input           h1_v_i, // second 64 bits
-	input           h1_v_i, // last 32 bits of the header
+	input           h2_v_i, // last 32 bits of the header
 
 	// session id, spread over 2 parts
 	output logic        sid_p0_v_o, 
@@ -30,14 +30,14 @@ module header(
 );
 
 assign sid_p0_v_o   = h0_v_i;
-assign sid_p0_o     = data_i[64:0];
+assign sid_p0_o     = data_i[63:0];
 assign sid_p1_v_o   = h1_v_i;
 assign sid_p1_o     = data_i[15:0];
 
-assign seq_num_p0_o = h1_v_i;
-assign seq_num_p0_o = data_i[63:16];
-assign seq_num_p1_o = h2_v_i;
-assign seq_num_p1_o = data_i[15:0];
+assign seq_num_p0_v_o = h1_v_i;
+assign seq_num_p0_o   = data_i[63:16];
+assign seq_num_p1_v_o = h2_v_i;
+assign seq_num_p1_o   = data_i[15:0];
 
 assign msg_cnt_v_o = h2_v_i;
 assign msg_cnt_o   = data_i[31:16];

@@ -145,7 +145,10 @@ header m_header(
 // message and sequence tracking
 
 // msg length based on tkeep
-cnt_ones_thermo m_cnt_ones_tkeep#(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))(
+cnt_ones_thermo m_cnt_ones_tkeep #(
+	.D_W(AXI_KEEP_W),
+	.D_LW(AXI_KEEP_LW)
+)(
 	.data_i(upd_axis_tkeep_q),
 	.cnt_o(upd_axis_data_len)
 );

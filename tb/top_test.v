@@ -1,16 +1,17 @@
 module top_test;
 	localparam AXI_DATA_W_ = 64;
 	localparam AXI_KEEP_W  = $clog2(AXI_DATA_W);
-	localparam LEN = 8;
-	localparam ML_W = 2*LEN;
+	localparam LEN    = 8;
+	localparam ML_W  = 2*LEN;
 	localparam SID_W = 10*LEN;// session id
-	localparam SEQ_W = 8*LEN;// sequence number
+	localparam SEQ_W = 8*LEN; // sequence number
+	localparam MH_W  = 20*LEN;// header 
 
 	reg clk = 0;
 	reg nreset = 1'b0;	
 
-	logic 	
-	logic                  upd_axis_tvalid_o = 1'b0;
+	logic [MH_W-1:0]       moldudp_header;
+	logic                  upd_axis_tvalid_o;
 	logic [AXI_KEEP_W-1:0] upd_axis_tkeep_o;
 	logic [AXI_DATA_W-1:0] upd_axis_tdata_o;
 	logic                  upd_axis_tlast_o;
@@ -26,25 +27,38 @@ module top_test;
 	initial
 	begin
 		$display("Test start");
+		upd_axis_tvalid_o = 1'b0;
+		upd_axis_tkeep_o  = {AXI_KEEP_W{1'bx}};
+		upd_axis_tdata_o  = {AXI_DATA_W{1'bx}};
+		upd_axis_tlast_o  = 1'bx;
+		upd_axis_tuser_o  = 1'bx;
 		# 10
 		nreset = 1'b1;
+		#10
+		/* axi stream */ 
+		upd_axis_tvalid_o = 1'b1;	
+		upd_axis_tkeep_o  = {AXI_KEEP_W{ 1'b1}};
+		upd_axis_tlast_o = 1'b0;
+		upd_axis_tuser_o = 1'b0;
+
+		moldudp_header[SID_W-1:0] = 'hDEADBEEF;
+		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
+		moldudp_header[MH_W-1:MH_W-ML_W] = 'habcd;
+		/* Header 0*/
+		upd_axis_tdata_o = moldudp_header[AXI_DATA_W-1:0];
+		#10
+		/* header 1*/
+		upd_axis_tdata_o = moldudp_header[(AXI_DATA_W*2)-1:AXI_DATA_W];
+		#10
+		/* header 2*/
+		upd_axis_tdata_o = moldudp_header[MH_W-1:AXI_DATA_W*2];
+		/* msg 0 */
+		# 10
+		$display("Test end");
 		$finish;
 	end
 	 /* Make a regular pulsing clock. */
 	always #5 clk = !clk;
-
-	/* axi stream */ 
-	/* Header 0*/
-	assign upd_axis_tvalid_o = 1'b1;	
-	assign upd_axis_tkeep_o = '1;
-	assign upd_axis_tdata_o;
-	assign upd_axis_tlast_o;
-	assign upd_axis_tuser_o;
-	/* header 1*/
-
-	/* header 2*/
-
-	/* msg 0 */
 
 	top m_top(
 	.clk(clk),
