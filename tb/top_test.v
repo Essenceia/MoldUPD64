@@ -47,9 +47,9 @@ module top_test;
 		upd_axis_tlast_o = 1'b0;
 		upd_axis_tuser_o = 1'b0;
 
-		moldudp_header[SID_W-1:0] = 'd1;
+		moldudp_header[SID_W-1:0] = 'hDEADBEEF;
 		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
-		moldudp_header[MH_W-1:MH_W-ML_W] = 'habcd;
+		moldudp_header[MH_W-1:MH_W-ML_W] = 'd1;
 
 		moldudp_msg_len = 'd16;
 		/* Header 0*/
