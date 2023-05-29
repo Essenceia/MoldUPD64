@@ -1,3 +1,5 @@
+`timescale 1ns/100ps
+
 module top_test;
 	localparam AXI_DATA_W = 64;
 	localparam AXI_KEEP_W = AXI_DATA_W/8;
@@ -26,6 +28,8 @@ module top_test;
 
 	initial
 	begin
+ 		$dumpfile("build/wave.vcd"); // create a VCD waveform dump called "wave.vcd"
+        $dumpvars(0, top_test);
 		$display("Test start");
 		upd_axis_tvalid_o = 1'b0;
 		upd_axis_tkeep_o  = {AXI_KEEP_W{1'bx}};
