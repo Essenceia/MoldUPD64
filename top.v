@@ -47,12 +47,12 @@ reg   [ML_W-1:0] msg_len_q;
 logic [ML_W-1:0] msg_len_next;
 logic [ML_W-1:0] init_msg_len;
 logic            init_msg_len_v;
-logic [2:0]      init_msg_len_sel;
 
 logic [AXI_KEEP_LW-1:0] upd_axis_data_len; 
 logic [ML_W-1:0]        msg_len_dec;
 logic                   msg_len_zero;
 logic                   msg_end;
+logic                   msg_end_align;
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
 logic                   cnt_end;
@@ -67,6 +67,7 @@ logic [DFF_DATA_W-1:0] flop_data_next;
 logic [DFF_DATA_W-1:0] flop_data_q;
 
 logic [AXI_KEEP_LW-1:0] flop_shift;
+logic [AXI_KEEP_LW-1:0] len_shift;
 logic [AXI_KEEP_LW-1:0] flop_len_next;
 logic [AXI_KEEP_LW-1:0] flop_len_q;
 
@@ -97,9 +98,11 @@ logic fsm_h2_msg_next;
 reg   fsm_msg_q;
 reg   fsm_msg_overlap_q;
 reg   fsm_msg_len_split_q;
+reg   fsm_msg_len_align_q;
 logic fsm_msg_next;
 logic fsm_msg_overlap_next;
 logic fsm_msg_len_split_next;
+logic fsm_msg_len_align_next;
 
 // AXI 
 reg [AXI_DATA_W-1:0]   upd_axis_tdata_q;
@@ -164,17 +167,17 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_split_q;
 // decrement the number of bytes of the current message that have been
 // recieved ( ! not sent ) 
-assign msg_len_zero = ~|msg_len_q;
-assign msg_end      = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
-
+assign msg_len_zero  = ~|msg_len_q;
+assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
+assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|flop_shift; // msg end aligns with the end of the AXI payload
+ 
 // init msg
-assign init_msg_len_sel = { msg_len_zero,   // current message len has reached zero and we are still
-					                        // expecting more messages
-					        msg_overlap,    // we have an overlap this cycle
-						    fsm_h2_msg_q};  // first message
-assign init_msg_len_v = fsm_h2_msg_q | (msg_v & msg_end); 
+assign init_msg_len_v = fsm_h2_msg_q 
+			          | (msg_v & msg_end & ~msg_end_align)
+					  | fsm_msg_len_split_q 
+					  | fsm_msg_len_align_q; 
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & upd_axis_tdata_q[32+ML_W-1:32] // TODO : support 1st msg len=0
-					  | { ML_W{ fsm_msg_q }} &  { init_msg_len_p1, init_msg_len_p0 }
+					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
 
 assign msg_len_next = init_msg_len_v ? init_msg_len :
@@ -202,12 +205,13 @@ generate
 		else assign init_msg_len_p1_arr[j] = upd_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
 	end
 endgenerate
+assign len_shift = flop_shift & {ML_W{~fsm_msg_len_align_q}};
 always_comb begin
 	init_msg_len_p0 = {8{1'bX}};
 	init_msg_len_p1 = {8{1'bX}};
 	for( int unsigned i=0; i <= AXI_KEEP_W-1; i++) begin
-		if ( i == flop_shift ) init_msg_len_p0 = init_msg_len_p0_arr[i];
-		if ( i == flop_shift ) init_msg_len_p1 = init_msg_len_p1_arr[i];
+		if ( i == ( len_shift )) init_msg_len_p0 = init_msg_len_p0_arr[i];
+		if ( i == ( len_shift )) init_msg_len_p1 = init_msg_len_p1_arr[i];
 	end
 end
 // init message len : flop if lenght ( 2 bytes ) are spread over 2 different
@@ -223,22 +227,24 @@ end
 
 assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
 					 | {ML_W{fsm_h2_msg_q}} & 'd2  // TODO : add support for first msg len=0 
-					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q; // keep current flop len shift until the end of the message
+					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q // keep current flop len shift until the end of the message
+				     | {ML_W{fsm_msg_len_align_q}} & 'd6; 
 assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
-				   | {ML_W{fsm_msg_q}} & flop_len_q; 
+				   | {ML_W{fsm_msg_q}} & flop_len_q
+				   | {ML_W{fsm_msg_len_align_q}} & 'd6; 
  
 //assign axis_flop_tdata_shift = flop_len_next; 
 
 //assign axis_msg_tdata_shift = flop_len_next;
 
 // TODO : move declaration to top ?
-logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W-1:0];
-logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W-1:0];
+logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W:0];
+logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W:0];
 genvar j;
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = upd_axis_tdata_q[AXI_DATA_W-1:0]; 
-	for( j = 1; j < DFF_DATA_LW; j++) begin
+	for( j = 1; j <= DFF_DATA_LW; j++) begin
 		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(64-(8*j))] }; 
 		assign axis_msg_tdata_shifted_arr[j]  = { upd_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };
 	end
@@ -296,13 +302,16 @@ assign fsm_h2_msg_next = fsm_h1_q;
 // overlap : part of the next axi payload is of a different modlupd64 message
 //           it will be routed to the free moldupd64 module
 assign fsm_msg_next = fsm_h2_msg_q 
-					| (fsm_msg_q & ~(msg_end & cnt_end) & ~fsm_msg_len_split_next )
-					| fsm_msg_len_split_q;
+					| (fsm_msg_q & ~(msg_end & cnt_end) & ~( fsm_msg_len_split_next | fsm_msg_len_align_next ))
+					| fsm_msg_len_split_q
+					| fsm_msg_len_align_q;
 
-
-// TODO : unused fsm states for now
 assign fsm_msg_overlap_next   = 1'b0;  
+// msg len split over 2 AXI payloads
 assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end & (flop_shift == 'd1);
+// msg len missing : present in start of the next packet
+assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end & msg_end_align;
+
 always @(posedge clk)
 begin
 	if ( ~nreset ) begin
@@ -313,6 +322,7 @@ begin
 		fsm_msg_q         <= 1'b0;
 		fsm_msg_overlap_q <= 1'b0;
 		fsm_msg_len_split_q <= 1'b0;
+		fsm_msg_len_align_q <= 1'b0;
 		end else begin
 		fsm_invalid_q    <= fsm_invalid_next; 
 		fsm_h0_q         <= fsm_h0_next;     
@@ -321,6 +331,7 @@ begin
 		fsm_msg_q         <= fsm_msg_next;
 		fsm_msg_overlap_q   <= fsm_msg_overlap_next;
 		fsm_msg_len_split_q <= fsm_msg_len_split_next;
+		fsm_msg_len_align_q <= fsm_msg_len_align_next;
 	end
 end
 
@@ -369,8 +380,6 @@ always @(posedge clk) begin
 		sva_msg_cnt_init_h2 : assert ( init_msg_cnt_v == fsm_h2_msg_q);
 		sva_xcheck_msg_cnt : assert ( ~|fsm_f[7:4] | ( |fsm_f[7:4] & ~$isunknown( msg_cnt_q )));
 
-		// init msg sel should be onehot, used in mux
-		sva_init_msg_len_sel_onehot : assert ( ~init_msg_len_v | ( init_msg_len_v & $onehot( init_msg_len_sel )));
 	end
 end
 `endif
