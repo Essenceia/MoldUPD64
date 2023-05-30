@@ -238,7 +238,7 @@ logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W-1:0];
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W-1:0];
 genvar j;
 generate
-	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'b0}}; 
+	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = upd_axis_tdata_q[AXI_DATA_W-1:0]; 
 	for( j = 1; j < DFF_DATA_LW; j++) begin
 		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(64-(8*j))] }; 
