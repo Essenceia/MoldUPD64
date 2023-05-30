@@ -3,9 +3,8 @@
  * This work is licensed under the Creative Commons Attribution-NonCommercial
  * 4.0 International License. 
  * 
- * This code is provided "as is" without any express or implied warranties.
- * 
- * For purchasing a commertial license contact : julia.desmazes@gmail.com  */ 
+ * This code is provided "as is" without any express or implied warranties. */ 
+
 
 module header(
 	input [63:0]    data_i,
