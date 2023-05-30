@@ -51,7 +51,7 @@ module top_test;
 		// header : seq num
 		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
 		// header : msg cnt
-		moldudp_header[MH_W-1:MH_W-ML_W] = 'd2;
+		moldudp_header[MH_W-1:MH_W-ML_W] = 'd3;
 
 		moldudp_msg_len = 16'd16;
 		/* Header 0*/
@@ -72,8 +72,15 @@ module top_test;
 		#10
 		/* payload 1 of msg 1 */
 		upd_axis_tdata_o = {16{4'hD}};
-		upd_axis_tlast_o = 1'b1;
 		#10
+		/* payload 0 of msg 2 */
+		moldudp_msg_len = 16'd8;
+		upd_axis_tdata_o = { {12{4'hE}} , moldudp_msg_len};
+		#10
+		/* payload 1 of msg 2 */
+		upd_axis_tdata_o = {48'bX , {4{4'hF}}};
+		upd_axis_tkeep_o = { '0, 2'b11};
+		upd_axis_tlast_o = 1'b1;
 		#10
 		/* no msg */
 		upd_axis_tvalid_o = 1'b0;
