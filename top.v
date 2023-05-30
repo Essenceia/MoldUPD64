@@ -55,29 +55,31 @@ logic [AXI_KEEP_LW-1:0] upd_axis_data_len;
 logic [ML_W-1:0]        msg_len_dec;
 logic                   msg_len_zero;
 logic                   msg_end;
+logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
 logic                   cnt_last;
+
 
 logic                  msg_valid;
 logic [AXI_DATA_W-1:0] msg_data;
 
 // data routing
+// data shifted to be consumed next cycle
 logic [DFF_DATA_W-1:0] flop_data_next;
 logic [DFF_DATA_W-1:0] flop_data_q;
 
+logic [AXI_KEEP_LW-1:0] flop_shift;
 logic [AXI_KEEP_LW-1:0] flop_len_next;
 logic [AXI_KEEP_LW-1:0] flop_len_q;
 
-logic [AXI_KEEP_LW-1:0] axis_msg_tdata_mask;
-logic [AXI_KEEP_LW-1:0] axis_flop_tdata_mask;
+logic [AXI_KEEP_W-1:0] axis_msg_mask;
+logic [AXI_KEEP_W-1:0] flop_msg_mask;
 
 logic [AXI_KEEP_LW-1:0] axis_msg_tdata_shift;
 logic [AXI_KEEP_LW-1:0] axis_flop_tdata_shift;
 
 // data shifted to be consumed in this cycle
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted;
-// data shifted to be consumed next cycle
-logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted;
 
 logic [AXI_DATA_W-1:0] msg_mask;
 
@@ -158,7 +160,7 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 );
 
 // decrement the number of bytes of the current message that have been
-// recieved
+// recieved ( ! not sent ) 
 assign msg_len_zero = ~|msg_len_q;
 assign msg_end      = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
 
@@ -167,53 +169,79 @@ assign init_msg_len_sel = { msg_len_zero,   // current message len has reached z
 					                        // expecting more messages
 					        msg_overlap,    // we have an overlap this cycle
 						    fsm_h2_msg_q};  // first message
-assign init_msg_len_v = |init_msg_len_sel; 
-assign init_msg_len   = { ML_W{ init_msg_len_sel[0] }} &  upd_axis_tdata_q[47:32];
+assign init_msg_len_v = fsm_h2_msg_q; 
+assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( upd_axis_tdata_q[32+ML_W-1:32] - 'd1);// decrement by the byte of the first packet TODO : support 1st msg len=0
 					 /* | { ML_W{ init_msg_len_sel[1] }} & TODO
 					  | { ML_W{ init_msg_len_sel[2] }} & ;*/
- 
+
 assign msg_len_next = init_msg_len_v ? init_msg_len :
 					  upd_axis_tvalid_q ? msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, upd_axis_data_len } :
 					  msg_len_q;
+always @(posedge clk)
+begin
+	msg_len_q  <= msg_len_next;
+end
+// output mask
+len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_msg_end_mask(
+	.len_i(msg_len_q[AXI_KEEP_LW-1:0]),
+	.mask_o(msg_end_mask)
+);
+
 	
 // Message data buffering 
 // When possible we want to gather message bits into 64 bits continus chunks
 
-assign axis_msg_tdata_mask = 'X ;//  msg_len_q < flop_len_q ? 
-assign axis_msg_tdata_shift = msg_len_q < flop_len_q ? msg_len_q : flop_len_q;
-	
-assign axis_flop_tdata_shift = 'X; 
+assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
+					 | {ML_W{fsm_h2_msg_q}} & 'd2  // TODO : add support for first msg len=0 
+					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q; // keep current flop len shift until the end of the message
+assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
+				   | {ML_W{fsm_msg_q}} & flop_len_q; 
+ 
+//assign axis_flop_tdata_shift = flop_len_next; 
+
+//assign axis_msg_tdata_shift = flop_len_next;
 
 // TODO : move declaration to top ?
 logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W-1:0];
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W-1:0];
 genvar j;
-generate 
-	for( j = 0; j < DFF_DATA_LW; j++) begin
-		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(63-(8*j))] }; 
-		assign axis_msg_tdata_shifted_arr[j] = { upd_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };   
+generate
+	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'b0}}; 
+	assign axis_msg_tdata_shifted_arr[0]  = {AXI_DATA_W{1'b0}}; 
+	for( j = 1; j < DFF_DATA_LW; j++) begin
+		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(64-(8*j))] }; 
+		assign axis_msg_tdata_shifted_arr[j] = { upd_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };
 	end
 endgenerate
 
 always_comb begin
-	axis_flop_tdata_shifted = { AXI_DATA_W{1'bX}}; // default
+	flop_data_next = { AXI_DATA_W{1'bX}}; // default
 	axis_msg_tdata_shifted  = { AXI_DATA_W{1'bX}}; // default
 	for( int unsigned i=0; i <= DFF_DATA_LW; i++) begin
-	 	if (i == flop_len_q) axis_flop_tdata_shifted = axis_flop_tdata_shifted_arr[i];
-	 	if (i == flop_len_q) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
+	 	if (i == flop_shift) flop_data_next = axis_flop_tdata_shifted_arr[i];
+	 	if (i == flop_shift) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
 	end
 end
 
-// TODO : We assume that the length of the first message is not zero, verify if
-//        this assumption is true in paractice, else, add support of routing 
-//        last 2 bytes of tdata to init_len 
-assign save_data_next = { 48'b0 , {16{ fsm_h2_msg_q}}} & { 48'b0 , upd_axis_tdata_q[63:48] }; // init
-				    /* | TODO; */
-				
-assign save_keep_next = { 7'b0 , fsm_h2_msg_q };
-					/* | */
+always @(posedge clk) begin
+	flop_len_q <= flop_len_next;
+	flop_data_q <= flop_data_next;
+end
 
-assign msg_data = 'X; 
+
+// mask
+len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_flop_msg_mask(
+	.len_i(flop_len_q),
+	.mask_o(flop_msg_mask)
+);
+
+generate 
+	for ( j = 0; j < AXI_KEEP_W; j++) begin
+		assign msg_data[j*8+7:j*8] = {8{flop_msg_mask[j]}} & flop_data_q[j*8+7:j*8]
+								   | {8{~flop_msg_mask[j]}} & axis_msg_tdata_shifted[j*8+7:j*8];
+	end
+endgenerate
+
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
@@ -263,6 +291,8 @@ end
 // output
 assign upd_axis_tready_o = 1'b1; // we are always ready to accept a new packet 
 
+assign mold_msg_data_o = msg_data; 
+assign mold_msg_mask_o = msg_end ? msg_end_mask : '1; 
 
 `ifdef FORMAL
 
