@@ -81,8 +81,9 @@ logic [AXI_KEEP_LW-1:0] axis_flop_tdata_shift;
 // data shifted to be consumed in this cycle
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted;
 // length
-logic [7:0]       axis_len_p0_tdata_shifted;
-logic [7:0]       axis_len_p1_tdata_shifted;
+logic [7:0]       init_msg_len_p0;
+logic [7:0]       init_msg_len_p0_q;// flopped in case of len cut over 2 payloads
+logic [7:0]       init_msg_len_p1;
 
 logic [AXI_DATA_W-1:0] msg_mask;
 
@@ -174,9 +175,9 @@ assign init_msg_len_sel = { msg_len_zero,   // current message len has reached z
 					        msg_overlap,    // we have an overlap this cycle
 						    fsm_h2_msg_q};  // first message
 assign init_msg_len_v = fsm_h2_msg_q | (msg_v & msg_end); 
-assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & upd_axis_tdata_q[32+ML_W-1:32] ;// TODO : support 1st msg len=0
-					 /* | { ML_W{ init_msg_len_sel[1] }} & TODO
-					  | { ML_W{ init_msg_len_sel[2] }} & ;*/
+assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & upd_axis_tdata_q[32+ML_W-1:32] // TODO : support 1st msg len=0
+					  | { ML_W{ fsm_msg_q }} &  { init_msg_len_p1, init_msg_len_p0 }
+					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
 
 assign msg_len_next = init_msg_len_v ? init_msg_len :
 					  upd_axis_tvalid_q ? msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, upd_axis_data_len } :
@@ -190,6 +191,33 @@ len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_msg_end_mask(
 	.len_i(msg_len_q[AXI_KEEP_LW-1:0]),
 	.mask_o(msg_end_mask)
 );
+
+// len
+logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
+logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
+generate 
+	assign init_msg_len_p0_arr[0] = upd_axis_tdata_q[7:0];	
+	assign init_msg_len_p1_arr[0] = upd_axis_tdata_q[15:8];	
+	for(j=1; j<AXI_KEEP_W; j++) begin
+		assign init_msg_len_p0_arr[j] = upd_axis_tdata_q[63-8*(j-1): 64-8*j];
+		if ( j == 1 ) assign init_msg_len_p1_arr[j] = upd_axis_tdata_q[7:0];
+		else assign init_msg_len_p1_arr[j] = upd_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
+	end
+endgenerate
+always_comb begin
+	init_msg_len_p0 = {8{1'bX}};
+	init_msg_len_p1 = {8{1'bX}};
+	for( int unsigned i=0; i <= AXI_KEEP_W-1; i++) begin
+		if ( i == flop_shift ) init_msg_len_p0 = init_msg_len_p0_arr[i];
+		if ( i == flop_shift ) init_msg_len_p1 = init_msg_len_p1_arr[i];
+	end
+end
+// init message len : flop if lenght ( 2 bytes ) are spread over 2 different
+// AXI payloads
+always @(posedge clk) begin
+	init_msg_len_p0_q <= init_msg_len_p0;
+end
+
 
 	
 // Message data buffering 
@@ -211,7 +239,7 @@ logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W-1:0];
 genvar j;
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'b0}}; 
-	assign axis_msg_tdata_shifted_arr[0]  = {AXI_DATA_W{1'b0}}; 
+	assign axis_msg_tdata_shifted_arr[0]  = upd_axis_tdata_q[AXI_DATA_W-1:0]; 
 	for( j = 1; j < DFF_DATA_LW; j++) begin
 		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, upd_axis_tdata_q[63:(64-(8*j))] }; 
 		assign axis_msg_tdata_shifted_arr[j]  = { upd_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };
@@ -228,32 +256,10 @@ always_comb begin
 	end
 end
 
-// len
-logic [7:0] axis_len_p0_tdata_shifted_arr[AXI_KEEP_W-1:0];
-logic [7:0] axis_len_p1_tdata_shifted_arr[AXI_KEEP_W-1:0];
-generate 
-	assign axis_len_p0_tdata_shifted_arr[0] = upd_axis_tdata_q[7:0];	
-	assign axis_len_p1_tdata_shifted_arr[0] = upd_axis_tdata_q[15:8];	
-	for(j=1; j<AXI_KEEP_W; j++) begin
-		assign axis_len_p0_tdata_shifted_arr[j] = upd_axis_tdata_q[63-8*(j-1): 64-8*j];
-		if ( j == 1 ) assign axis_len_p1_tdata_shifted_arr[j] = upd_axis_tdata_q[7:0];
-		else assign axis_len_p1_tdata_shifted_arr[j] = upd_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
-	end
-endgenerate
-always_comb begin
-	axis_len_p0_tdata_shifted = {8{1'bX}};
-	axis_len_p1_tdata_shifted = {8{1'bX}};
-	for( int unsigned i=0; i <= AXI_KEEP_W-1; i++) begin
-		if ( i == flop_shift ) axis_len_p0_tdata_shifted = axis_len_p0_tdata_shifted_arr[i];
-		if ( i == flop_shift ) axis_len_p1_tdata_shifted = axis_len_p1_tdata_shifted_arr[i];
-	end
-end
-
 always @(posedge clk) begin
 	flop_len_q  <= flop_len_next;
 	flop_data_q <= flop_data_next;
 end
-
 
 // mask
 len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_flop_msg_mask(

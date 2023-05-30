@@ -73,6 +73,8 @@ module top_test;
 		/* payload 1 of msg 1 */
 		upd_axis_tdata_o = {16{4'hD}};
 		upd_axis_tlast_o = 1'b1;
+		#10
+		#10
 		/* no msg */
 		upd_axis_tvalid_o = 1'b0;
 		upd_axis_tkeep_o  = 'x;
