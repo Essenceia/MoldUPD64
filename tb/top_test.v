@@ -65,7 +65,7 @@ module top_test;
 		upd_axis_tdata_o = {16{4'ha}};
 		#10
 		/* payload 1 of msg 0 */
-		upd_axis_tdata_o = { {32{1'bx}}, {8{4'hB}}};
+		upd_axis_tdata_o = { {16{1'bx}}, {12{4'hB}}};
 		upd_axis_tlast_o = 1'b1;
 		upd_axis_tkeep_o = {4'b0, 4'hf};
 		#10

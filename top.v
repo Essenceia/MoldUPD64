@@ -12,7 +12,7 @@
 
 module top #(
 	parameter AXI_DATA_W = 64,
-	parameter AXI_KEEP_W = 8,// $clog2(AXI_DATA_W)
+	parameter AXI_KEEP_W = 8,
 	parameter ML_W = 16 // Mold length field width in bits
 )(
 	input clk,
@@ -57,10 +57,10 @@ logic                   msg_len_zero;
 logic                   msg_end;
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
-logic                   cnt_last;
+logic                   cnt_end;
 
 
-logic                  msg_valid;
+logic                  msg_v;
 logic [AXI_DATA_W-1:0] msg_data;
 
 // data routing
@@ -159,10 +159,11 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 	.cnt_o(upd_axis_data_len)
 );
 
+assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_split_q;
 // decrement the number of bytes of the current message that have been
 // recieved ( ! not sent ) 
 assign msg_len_zero = ~|msg_len_q;
-assign msg_end      = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= upd_axis_data_len );
+assign msg_end      = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
 
 // init msg
 assign init_msg_len_sel = { msg_len_zero,   // current message len has reached zero and we are still
@@ -246,14 +247,15 @@ endgenerate
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
 					  msg_end ? msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 } : msg_cnt_q;
-
+assign cnt_end = ~|msg_cnt_next; 
 always @(posedge clk)
 begin
 	msg_cnt_q <= msg_cnt_next;	
 end
 // fsm
 
-assign fsm_invalid_next = fsm_invalid_q & ~upd_axis_tvalid_i; 
+assign fsm_invalid_next = fsm_invalid_q & ~upd_axis_tvalid_i // first payload received
+						| fsm_msg_q & ( msg_end & cnt_end );
 // header 
 // hX  : header is received over multiple cycles 
 // msg : during last cycle part of the packed is the begining of the message
@@ -264,8 +266,13 @@ assign fsm_h2_msg_next = fsm_h1_q;
 // message
 // overlap : part of the next axi payload is of a different modlupd64 message
 //           it will be routed to the free moldupd64 module
-assign fsm_msg_next = fsm_h2_msg_q;
- 
+assign fsm_msg_next = fsm_h2_msg_q 
+					| fsm_msg_q & ~(msg_end & cnt_end);
+
+
+// TODO : unused fsm states for now
+assign fsm_msg_overlap_next   = 1'b0;  
+assign fsm_msg_len_split_next = 1'b0;
 always @(posedge clk)
 begin
 	if ( ~nreset ) begin
@@ -291,6 +298,7 @@ end
 // output
 assign upd_axis_tready_o = 1'b1; // we are always ready to accept a new packet 
 
+assign mold_msg_v_o    = msg_v; 
 assign mold_msg_data_o = msg_data; 
 assign mold_msg_mask_o = msg_end ? msg_end_mask : '1; 
 
