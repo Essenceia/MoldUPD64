@@ -171,7 +171,7 @@ assign init_msg_len_sel = { msg_len_zero,   // current message len has reached z
 					        msg_overlap,    // we have an overlap this cycle
 						    fsm_h2_msg_q};  // first message
 assign init_msg_len_v = fsm_h2_msg_q; 
-assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( upd_axis_tdata_q[32+ML_W-1:32] - 'd1);// decrement by the byte of the first packet TODO : support 1st msg len=0
+assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & upd_axis_tdata_q[32+ML_W-1:32] ;// TODO : support 1st msg len=0
 					 /* | { ML_W{ init_msg_len_sel[1] }} & TODO
 					  | { ML_W{ init_msg_len_sel[2] }} & ;*/
 

@@ -46,10 +46,12 @@ module top_test;
 		upd_axis_tkeep_o  = {AXI_KEEP_W{ 1'b1}};
 		upd_axis_tlast_o = 1'b0;
 		upd_axis_tuser_o = 1'b0;
-
+		// header : sid
 		moldudp_header[SID_W-1:0] = 'hDEADBEEF;
+		// header : seq num
 		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
-		moldudp_header[MH_W-1:MH_W-ML_W] = 'd1;
+		// header : msg cnt
+		moldudp_header[MH_W-1:MH_W-ML_W] = 'd2;
 
 		moldudp_msg_len = 16'd16;
 		/* Header 0*/
@@ -64,11 +66,13 @@ module top_test;
 		/* payload 0 of msg 0 */
 		upd_axis_tdata_o = {16{4'ha}};
 		#10
-		/* payload 1 of msg 0 */
-		upd_axis_tdata_o = { {16{1'bx}}, {12{4'hB}}};
-		upd_axis_tlast_o = 1'b1;
-		upd_axis_tkeep_o = {4'b0, 4'hf};
+		/* payload 1 of msg 0 + payload 0 of msg 1*/
+		moldudp_msg_len = 16'd8;
+		upd_axis_tdata_o = { moldudp_msg_len, {12{4'hB}}};
 		#10
+		/* payload 1 of msg 1 */
+		upd_axis_tdata_o = {16{4'hD}};
+		upd_axis_tlast_o = 1'b1;
 		/* no msg */
 		upd_axis_tvalid_o = 1'b0;
 		upd_axis_tkeep_o  = 'x;
