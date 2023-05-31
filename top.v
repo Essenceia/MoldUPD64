@@ -51,6 +51,7 @@ logic            init_msg_len_v;
 logic [AXI_KEEP_LW-1:0] upd_axis_data_len; 
 logic [ML_W-1:0]        msg_len_dec;
 logic [ML_W:0]          msg_len_got;
+logic [AXI_KEEP_LW-1:0] msg_len_got_sat;// saturated version
 logic                   msg_len_zero;
 logic                   msg_end;
 logic                   msg_end_align;
@@ -85,7 +86,7 @@ logic [7:0]       init_msg_len_p0;
 logic [7:0]       init_msg_len_p0_q;// flopped in case of len cut over 2 payloads
 logic [7:0]       init_msg_len_p1;
 
-logic [AXI_DATA_W-1:0] msg_mask;
+logic [AXI_KEEP_W-1:0] msg_mask;
 
 // FSM
 reg   fsm_invalid_q;
@@ -180,9 +181,11 @@ assign init_msg_len_v = fsm_h2_msg_q
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( upd_axis_tdata_q[32+ML_W-1:32] - 'd2 )// TODO : support 1st msg len=0
 					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
-assign msg_len_got  = upd_axis_data_len + flop_len_q;
-assign msg_len_dec  = msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, 
-					 ( msg_len_got[3] ) ? {{AXI_KEEP_LW-4{1'b0}} , 4'd8} : msg_len_got[AXI_KEEP_LW-1:0] };
+
+assign msg_len_got     = upd_axis_data_len + flop_len_q;
+assign msg_len_got_sat = ( msg_len_got[3] ) ? {{AXI_KEEP_LW-4{1'b0}} , 4'd8} : msg_len_got[AXI_KEEP_LW-1:0] ; 
+
+assign msg_len_dec  = msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, msg_len_got_sat };
 assign msg_len_next = init_msg_len_v ? init_msg_len :
 					  upd_axis_tvalid_q ? msg_len_dec : msg_len_q;
 always @(posedge clk)
@@ -191,10 +194,9 @@ begin
 end
 // output mask
 len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_msg_end_mask(
-	.len_i(msg_len_q[AXI_KEEP_LW-1:0]),
-	.mask_o(msg_end_mask)
+	.len_i(msg_len_got_sat),
+	.mask_o(msg_mask)
 );
-
 // len
 logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
@@ -343,7 +345,7 @@ assign upd_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 
 assign mold_msg_v_o    = msg_v; 
 assign mold_msg_data_o = msg_data; 
-assign mold_msg_mask_o = msg_end ? msg_end_mask : '1; 
+assign mold_msg_mask_o = msg_end ? msg_mask : '1; 
 
 `ifdef FORMAL
 
