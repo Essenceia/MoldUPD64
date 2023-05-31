@@ -86,7 +86,9 @@ logic [7:0]       init_msg_len_p0;
 logic [7:0]       init_msg_len_p0_q;// flopped in case of len cut over 2 payloads
 logic [7:0]       init_msg_len_p1;
 
-logic [AXI_KEEP_W-1:0] msg_mask;
+logic                   unused_msg_mask_int;
+logic [AXI_KEEP_LW-1:0] msg_mask_int;
+logic [AXI_KEEP_W-1:0]  msg_mask;
 
 // FSM
 reg   fsm_invalid_q;
@@ -182,7 +184,7 @@ assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( upd_axis_tdata_q[32+ML_W-1:3
 					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
 
-assign msg_len_got     = upd_axis_data_len + flop_len_q;
+assign msg_len_got     = ( {AXI_KEEP_LW{upd_axis_tvalid_q}} & upd_axis_data_len) + flop_len_q;
 assign msg_len_got_sat = ( msg_len_got[3] ) ? {{AXI_KEEP_LW-4{1'b0}} , 4'd8} : msg_len_got[AXI_KEEP_LW-1:0] ; 
 
 assign msg_len_dec  = msg_len_q - { {ML_W - AXI_KEEP_LW { 1'b0 }}, msg_len_got_sat };
@@ -193,13 +195,15 @@ begin
 	msg_len_q  <= msg_len_next;
 end
 // output mask
+assign { unused_msg_mask_int , msg_mask_int } = msg_len_q[AXI_KEEP_LW-1:0] ; 
 len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_msg_end_mask(
-	.len_i(msg_len_got_sat),
+	.len_i(msg_mask_int),
 	.mask_o(msg_mask)
 );
 // len
 logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
+genvar j;
 generate 
 	assign init_msg_len_p0_arr[0] = upd_axis_tdata_q[7:0];	
 	assign init_msg_len_p1_arr[0] = upd_axis_tdata_q[15:8];	
@@ -244,7 +248,7 @@ assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2
 // TODO : move declaration to top ?
 logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W:0];
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W:0];
-genvar j;
+
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = upd_axis_tdata_q[AXI_DATA_W-1:0]; 

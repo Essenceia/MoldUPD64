@@ -74,11 +74,11 @@ module top_test;
 		upd_axis_tdata_o = {16{4'hD}};
 		#10
 		/* payload 0 of msg 2 */
-		moldudp_msg_len = 16'd10;
+		moldudp_msg_len = 16'd11;
 		upd_axis_tdata_o = { {12{4'hE}} , moldudp_msg_len};
 		#10
 		/* payload 1 of msg 2 */
-		upd_axis_tdata_o = {'X , {8{4'hF}}};
+		upd_axis_tdata_o = {'X , {10{4'hF}}};
 		upd_axis_tkeep_o = { '0, 4'b1111};
 		upd_axis_tlast_o = 1'b1;
 		#10

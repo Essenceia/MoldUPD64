@@ -1,4 +1,5 @@
 - Documentation
+- Write down mold packet behavior assumptions
 - Add optional missing sequence number packed detector, extra axi bus interface if 
     included
-- Add support and assertions for receiving a series of consequtive zero lenght message 
+- Fix bug on mold mask
