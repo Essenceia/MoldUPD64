@@ -16,6 +16,10 @@ len_to_mask: len_to_mask.v
 header: header.v
 	iverilog ${FLAGS} -s header -o ${BUILD}/header header.v
 
+miss_msg_det: miss_msg_det.v
+	iverilog ${FLAGS} -s miss_msg_det -o ${BUILD}/miss_msg_det_tb miss_msg_det.v ${TB_DIR}/miss_msg_det_test.v
+	vvp ${BUILD}/miss_msg_det_tb
+
 top: top.v ${TB_DIR}/top_test.v cnt_ones_thermo header len_to_mask
 	iverilog ${FLAGS} -s top_test -o ${BUILD}/top cnt_ones_thermo.v len_to_mask.v header.v top.v ${TB_DIR}/top_test.v
 
