@@ -57,4 +57,4 @@ output       upd_axis_tready_i,
 ## License
 
 This code is licensed under CC BY-NC 4.0, to obtain a commercial license
-reach out to julia.desmazes@gmail.com .
+reach out to the author .
