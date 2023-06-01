@@ -121,8 +121,12 @@ endtask
 
 // check the next expected seq number and sid matches expected
 function check_exp_match( logic [`SEQ_NUM_W-1:0] tb_seq, logic [`SID_W-1:0] tb_sid );
-	assert ( tb_seq == m_miss_det.seq_q );
-	assert ( tb_sid == m_miss_det.sid_q );
+	logic seq_match;
+	logic sid_match;
+	assign seq_match =  tb_seq == m_miss_det.seq_q;
+	assign sid_match =  tb_sid == m_miss_det.sid_q;
+	assert(seq_match);
+	assert(sid_match);
 endfunction
 
 endmodule

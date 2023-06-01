@@ -106,7 +106,7 @@ assign seq_gap   = seq_num_i - seq_q;
 assign seq_lt    = seq_q < seq_num_i;
 assign seq_gap_v = seq_lt & v_i;  
 
-assign seq_next = seq_gap_v ? seq_gap_add : seq_add;
+assign seq_next = eos_i ? '0 : seq_gap_v ? seq_gap_add : seq_add;
 
 always @(posedge clk) begin
 	if ( ~nreset ) begin
