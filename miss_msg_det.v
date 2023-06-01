@@ -121,19 +121,30 @@ assign miss_seq_num_sid_o = sid_q;
 assign miss_seq_num_start_o = seq_q;
 assign miss_seq_num_cnt_o = seq_gap; 
 
-`ifdef FORMAL
+`ifdef FORMAL 
 
 initial begin
 	a_reset : assume ( ~nreset );
 end
 
 always @(posedge clk) begin
+	if ( nreset ) begin
 	// assume
 	// input message cnt 
-	a_no_overflow_msg_cnt : assume( v_i & ~seq_gap_add_overflow); 
+	a_no_overflow_msg_cnt : assume( v_i & ~seq_gap_add_overflow);	// assert
+	// x check 
+	sva_xcheck_v_i : assert( ~$isunknown( v_i ));
+	sva_xcheck_data_i : assert ( ~ v_i | ( v_i & ~$isunknown( |sid_i | |seq_num_i | |msg_cnt_i | oes_i) ));
+	sva_xcheck_seq_num_v : assert ( ~$isunknown(miss_seq_num_v_o));  
+	sva_xcheck_seq_num_data_o : assert ( ~miss_seq_num_v_o | 
+		( miss_seq_num_v_o & $isunknown( |miss_seq_num_sid_o | |miss_seq_num_start_o | |miss_seq_num_cnt_o ) ));  
+	sva_xcheck_sid_v : assert ( ~$isunknown(miss_sid_v_o)); 
+	sva_xcheck_sid_data_o : assert ( ~miss_sid_v_o |
+		( miss_sid_v_o & ($isunknown( |miss_sid_start_o | |miss_sid_seq_num_start_o | |miss_sid_cnt_o | |miss_sid_seq_num_end_o )) )); 
 	// cover
 	c_reset : cover ( ~nreset );
 	c_sid_overflow : cover ( sid_add_overflow );
+	end
 end
-`endif // FORMAL
+`endif // FORMAL 
 endmodule

@@ -1,7 +1,8 @@
 TB_DIR=tb
 BUILD=build
 CONF=conf
-FLAGS=-Wall -Wtimescale -g2012
+FLAGS=-Wall -g2012 -gassertions -gstrict-expr-width
+SIMDEF=SIMULATION
 WAVE_FILE=wave.vcd
 VIEW=gtkwave
 WAVE_CONF=wave.conf
@@ -20,7 +21,7 @@ miss_msg_det: miss_msg_det.v
 	iverilog ${FLAGS} -s miss_msg_det -o ${BUILD}/miss_msg_det_tb miss_msg_det.v
 
 miss_msg_det_tb: miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
-	iverilog ${FLAGS} -s miss_msg_det_tb -o ${BUILD}/miss_msg_det_tb miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
+	iverilog ${FLAGS} -s miss_msg_det_tb -D${SIMDEF} -o ${BUILD}/miss_msg_det_tb miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
 	vvp ${BUILD}/miss_msg_det_tb
 
 top: top.v ${TB_DIR}/top_test.v cnt_ones_thermo header len_to_mask
