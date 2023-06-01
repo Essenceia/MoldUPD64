@@ -353,11 +353,11 @@ assign mold_msg_mask_o = msg_end ? msg_mask : '1;
 
 `ifdef FORMAL
 
-logic [0:6] fsm_f;
+logic [0:7] fsm_f;
 assign fsm_f = {
 	fsm_invalid_q, 
 	fsm_h0_q, fsm_h1_q, fsm_h2_msg_q,
-	fsm_msg_q, fsm_msg_overlap_q, fsm_msg_len_split_q};
+	fsm_msg_q, fsm_msg_overlap_q, fsm_msg_len_split_q, fsm_msg_len_align_q};
 
 initial begin
 	// assume
