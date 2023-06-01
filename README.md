@@ -2,6 +2,14 @@
 
 RTL implementation of a MoldUPD64 receiver. 
 
+## Limitiations
+
+- Mold messages must be at least 6 bytes long.
+
+- Missing session id gap has a maximum, can only detect if the 
+  gap is less than `SID_GAP_MAX`.
+
+
 ## Packet view
 
 This code takes as input an AXI stream of the UPD payload and decapsulates the
@@ -9,7 +17,7 @@ multiple MoldUDP messages.
 
 ![MoldUDP packet!](doc/moldudp.png)
 
-## AXI stream 
+## UDP : AXI stream 
 
 This module accepts upd packets via an AXI stream interface, this module
 is the slave. 
