@@ -116,10 +116,10 @@ always @(posedge clk) begin
 	end
 end
 
-assign miss_seq_num_v_o = seq_gap_v & sid_match;
-assign miss_seq_num_sid_o = sid_q;
+assign miss_seq_num_v_o     = seq_gap_v & sid_match;
+assign miss_seq_num_sid_o   = sid_q;
 assign miss_seq_num_start_o = seq_q;
-assign miss_seq_num_cnt_o = seq_gap; 
+assign miss_seq_num_cnt_o   = seq_gap; 
 
 `ifdef FORMAL 
 
