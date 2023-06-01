@@ -9,6 +9,10 @@ RTL implementation of a MoldUPD64 receiver.
 - Missing session id gap has a maximum, can only detect if the 
   gap is less than `SID_GAP_MAX`.
 
+## Assumptions 
+
+- Next expected session id will only be incremented when an End-of-Sequence 
+  packet is received and not by sequence counter overflow.
 
 ## Packet view
 

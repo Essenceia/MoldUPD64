@@ -74,7 +74,7 @@ logic [ML_W:0] msg_cnt_add_one;
 
 // Session id
 assign { sid_add_overflow, sid_add } = sid_q + { {SID_W-1{1'b0}}, 1'b1};
-assign sid_add_v = eos_i | ( seq_add_v & seq_add_overflow );
+assign sid_add_v = eos_i;
 assign sid_gap   = sid_i - sid_q;
 assign sid_gap_v = sid_gap < SID_GAP_MAX;  
 assign sid_lt    = sid_gap_v & ( sid_q < sid_i );
