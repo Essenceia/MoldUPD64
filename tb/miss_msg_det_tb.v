@@ -85,14 +85,19 @@ task new_session();
 	int                    randvar;	
 	logic                  tb_seq_inc_overflow;
 	logic [`SEQ_NUM_W-1:0] tb_seq_inc;
-	logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt = '0;
+	logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt;
 	logic                  tb_inc_sid;
 	logic [`SEQ_NUM_W-1:0] tb_seq_exp;
-	logic [`SEQ_NUM_W-1:0] tb_seq_seen = '0;
+	logic [`SEQ_NUM_W-1:0] tb_seq_seen;
+
+	tb_seq_miss_cnt = '0;
+	tb_seq_seen = '0;
+
 	$display("Task start");
+
 	do begin
 		// No support for std::randomize in icarus verilog, it being only 32
-		// bits isn't an issue in our case
+		// bits, isn't an issue in our case
 		randvar    = $random(); 
 		tb_seq_inc = randvar[15:0];
 		{ tb_seq_inc_overflow, tb_seq_exp } = tb_seq + tb_seq_inc + 1;
@@ -147,11 +152,11 @@ task new_session();
 endtask
 
 // check the next expected seq number and sid matches expected
-function check_exp_match( logic [`SEQ_NUM_W-1:0] tb_seq, logic [`SID_W-1:0] tb_sid );
+function void check_exp_match( logic [`SEQ_NUM_W-1:0] tb_seq, logic [`SID_W-1:0] tb_sid );
 	logic seq_match;
 	logic sid_match;
-	assign seq_match =  tb_seq == m_miss_det.seq_q;
-	assign sid_match =  tb_sid == m_miss_det.sid_q;
+	seq_match =  tb_seq == m_miss_det.seq_q;
+	sid_match =  tb_sid == m_miss_det.sid_q;
 	assert(seq_match);
 	assert(sid_match);
 endfunction
@@ -159,7 +164,7 @@ endfunction
 // check miss signals
 // *_miss_cnt : number of missing messages/sessions not sent to uut
 // *_sent : last index seen by the uut
-function check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss,
+function void check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss,
 		logic [`SEQ_NUM_W-1:0] tb_seq_sent, logic [`SID_W-1:0] tb_sid_sent );
 	logic seq_miss_match;
 	logic sid_miss_match;
