@@ -39,7 +39,7 @@ module miss_msg_det #(
  
 	// missing sequence numbers of the same sid
 	output logic                 miss_seq_num_v_o,
-	output logic                 miss_seq_num_sid_o,
+	output logic [SID_W-1:0]     miss_seq_num_sid_o,
 	output logic [SEQ_NUM_W-1:0] miss_seq_num_start_o,	
 	output logic [SEQ_NUM_W-1:0] miss_seq_num_cnt_o,
 	// missing entire session's

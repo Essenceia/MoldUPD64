@@ -17,7 +17,7 @@ logic [`SEQ_NUM_W-1:0] seq_num_o;
 logic [`ML_W-1:0]      msg_cnt_o;
 logic                  eos_o; // end of session
 logic                  miss_seq_num_v_i;
-logic                  miss_seq_num_sid_i;
+logic [`SID_W-1:0]     miss_seq_num_sid_i;
 logic [`SEQ_NUM_W-1:0] miss_seq_num_start_i;	
 logic [`SEQ_NUM_W-1:0] miss_seq_num_cnt_i;
 logic                  miss_sid_v_i;
