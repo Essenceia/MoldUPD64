@@ -44,7 +44,10 @@ module top #(
 	output logic [SID_W-1:0]     miss_sid_cnt_o,
 	output logic [SEQ_NUM_W-1:0] miss_sid_seq_num_end_o,	
 	`endif // MISS_DET	
-
+	
+	`ifdef HEARTBEAT
+	output logic            flatlined_v_o,
+	`endif
 	// Mold message
 	output                  mold_msg_v_o,
 	output                  mold_msg_start_o, // start of a new msg
@@ -239,6 +242,16 @@ miss_msg_det #(
 );
 `endif
 
+`ifdef HEARTBEAT
+	// check if server is still alive
+	countdown #() m_cntdwn(
+		.clk(clk),
+		.nreset(nreset),
+
+		.start_v_i   (fsm_h0_q   ),
+		.finished_o(flatlined_v_o)
+	);
+`endif
 // message and sequence tracking
 
 // msg length based on tkeep

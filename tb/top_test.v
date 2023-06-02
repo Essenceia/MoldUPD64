@@ -27,7 +27,7 @@ module top_test;
 	logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
 	logic [AXI_DATA_W-1:0] mold_msg_data_o;
 
-`ifdef MISS_DET
+	`ifdef MISS_DET
 	logic                 miss_seq_num_v_o;
 	logic [SID_W-1:0]     miss_seq_num_sid_o;
 	logic [SEQ_NUM_W-1:0] miss_seq_num_start_o;	
@@ -37,7 +37,11 @@ module top_test;
 	logic [SEQ_NUM_W-1:0] miss_sid_seq_num_start_o;
 	logic [SID_W-1:0]     miss_sid_cnt_o;
 	logic [SEQ_NUM_W-1:0] miss_sid_seq_num_end_o;
-`endif
+	`endif
+
+	`ifdef HEARTBEAT
+	logic flatlined_v_o;
+	`endif
 	initial
 	begin
  		$dumpfile("build/wave.vcd"); // create a VCD waveform dump called "wave.vcd"
@@ -136,6 +140,10 @@ module top_test;
 	.miss_sid_seq_num_start_o(miss_sid_seq_num_start_o),
 	.miss_sid_cnt_o          (miss_sid_cnt_o),
 	.miss_sid_seq_num_end_o  (miss_sid_seq_num_end_o),
+	`endif
+	
+	`ifdef HEARTBEAT
+	.flatlined_v_o   (flatlined_v_o     ),
 	`endif
 
 	.mold_msg_v_o    (mold_msg_v_o    ),

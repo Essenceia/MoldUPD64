@@ -8,9 +8,8 @@
 
 /* Countdown */
 module countdown #(
-	parameter CNT = 10000,
-	parameter CNT_W = 14, // cnt log2
-	parameter CNT_B = CNT_W'b10011100010000 // cnt in a binary format
+	parameter CNT_W = 14, // cnt width
+	parameter CNT_B = 14'b10011100010000 // cnt in a binary format
 )(
 	input clk,
 	input nreset,
@@ -24,7 +23,7 @@ logic             zero;
 
 assign zero     = ~|cnt_q; 
 assign cnt_next = start_v_i ? CNT_B :
-					zero ? '0 : cnt_q - CNT_W'd1;
+					zero ? '0 : cnt_q - {{CNT_W-1{1'b0}}, 1'd1};
 always @(posedge clk)
 begin
 	if (~nreset ) begin
