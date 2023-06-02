@@ -56,7 +56,7 @@ logic [SID_W-1:0] sid_add;
 logic             sid_add_v;
 logic             sid_add_overflow;
 logic             sid_loop;
-logic             sid_gt;
+logic             sid_lt;
 logic             sid_gap_v;
 logic [SID_W-1:0] sid_gap;
 logic             sid_match;
@@ -68,6 +68,8 @@ logic                 seq_add_overflow;
 logic                 seq_add_v;
 logic                 seq_gap_v;
 logic [SEQ_NUM_W-1:0] seq_gap;
+logic [SEQ_NUM_W-1:0] seq_gap_add;
+logic                 seq_gap_overflow;
 logic                 seq_lt; // got seq num is less than our next expected number
 
 logic [ML_W:0] msg_cnt_add_one;

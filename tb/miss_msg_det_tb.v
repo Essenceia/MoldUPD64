@@ -1,7 +1,7 @@
 `define SEQ_NUM_W 18
 `define SID_W 80
 `define ML_W 16
-
+`define SIM_LOOP 3
 module miss_msg_det_tb;
 
 localparam SID_GAP_MAX =(  1 << 63 );
@@ -32,17 +32,21 @@ always #5 clk = ~clk;
 initial begin
 	$dumpfile("build/miss_tb.vcd");
 	$dumpvars(0, miss_msg_det_tb);
+	`ifdef DEBUG
 	$display("Starting packet miss detection tb");
+	`endif
 	// reset
 	#10
 	nreset = 1'b1;
 	// start test
-	new_session();
-	new_session();
-	new_session();
+	for( int i=0; i < `SIM_LOOP ; i++ ) begin
+		new_session();
+	end
 	
 	#10
+	`ifdef DEBUG
 	$display("Test end");
+	`endif
 	$finish;
 end
 
@@ -74,20 +78,23 @@ miss_msg_det #(
 
 );
 
-task send_pkt(input logic [`SEQ_NUM_W-1] tb_seq_inc, input logic [`SEQ_NUM_W-1:0] tb_seq_exp, inout logic [`SEQ_NUM_W-1] tb_seq_miss);
+task send_pkt(input logic [`SEQ_NUM_W-1] tb_seq_inc, input logic [`SEQ_NUM_W-1:0] tb_seq_exp, inout logic [`SEQ_NUM_W-1] tb_seq_miss_cnt);
 	// send packet 
 	v_o       = 1'b1;
 	sid_o     = tb_sid;
-	seq_num_o = tb_seq;
+	seq_num_o = tb_seq + tb_seq_miss_cnt ;
 	msg_cnt_o = tb_seq_inc;
 	eos_o     = 1'b0;	
 	// increment
-	tb_seq = tb_seq_exp;
+	tb_seq = tb_seq_exp + tb_seq_miss_cnt;
+	`ifdef DEBUG
 	$display("%t write seq_num %d, msg_cnt %d", $time, tb_seq, tb_seq_inc);
+	`endif
 	// check if miss seen
-	check_miss( tb_seq_miss, '0);
-	tb_seq_miss = '0;
-	#10	
+	#1
+	check_miss( tb_seq_miss_cnt, '0);
+	tb_seq_miss_cnt = '0;
+	#9
 	check_exp_match( tb_seq, tb_sid );
 endtask
 
@@ -96,7 +103,7 @@ task new_session();
 	int                    randvar;	
 	logic                  tb_seq_inc_overflow;
 	logic [`SEQ_NUM_W-1:0] tb_seq_inc;
-	logic [`SEQ_NUM_W-1:0] tb_seq_miss;
+	logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt = '0;
 	logic                  tb_inc_sid;
 	logic [`SEQ_NUM_W-1:0] tb_seq_exp;
 	$display("Task start");
@@ -106,15 +113,22 @@ task new_session();
 		randvar    = $random(); 
 		tb_seq_inc = randvar[15:0];
 		{ tb_seq_inc_overflow, tb_seq_exp } = tb_seq + tb_seq_inc + 1;
+		`ifdef DEBUG
 		$display("%t tb_seq_exp %d, tb_seq_inc %d, overflow %d",$time, tb_seq_exp, tb_seq_inc, tb_seq_inc_overflow);
+		`endif
 		if ( tb_seq_inc_overflow == 1'b0 ) begin
 			if (randvar % 4 == 0 ) begin
 				// don't send packet, increment miss cnt
-				#10	
-				tb_seq_miss = tb_seq_miss + tb_seq_inc + 1;
+				v_o = 1'b0;
+				tb_seq_miss_cnt = tb_seq_inc;
+				#10
+				v_o = 1'b0; // prevent syntax error
+				`ifdef DEBUG
+				$display("Miss triggered, missed %d messages", tb_seq_miss_cnt);
+				`endif
 			end else begin
 				// send packet
-				send_pkt(tb_seq_inc, tb_seq_exp, tb_seq_miss);
+				send_pkt(tb_seq_inc, tb_seq_exp, tb_seq_miss_cnt);
 			end
 		end
 	end while (tb_seq_inc_overflow == 1'b0 );
@@ -143,11 +157,11 @@ function check_exp_match( logic [`SEQ_NUM_W-1:0] tb_seq, logic [`SID_W-1:0] tb_s
 endfunction
 
 // check miss signals
-function check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss, logic [`SID_W-1:0] tb_sid_miss);
+function check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss);
 	logic seq_miss_match;
 	logic sid_miss_match;
 	sid_miss_match = ( tb_sid_miss != 0 ) == miss_sid_v_i ;
-	seq_miss_match = (( tb_seq_miss != 0 ) & ( tb_sid_miss == 0 )) == miss_seq_num_v_i ;
+	seq_miss_match =  ( tb_sid_miss != 0 ) | ( ( tb_sid_miss == 0 ) & (( tb_seq_miss_cnt != 0 ) == miss_seq_num_v_i  )) ;
 	assert ( sid_miss_match );
 	assert ( seq_miss_match );
 endfunction
