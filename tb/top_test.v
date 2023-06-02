@@ -6,7 +6,7 @@ module top_test;
 	localparam LEN   = 8;
 	localparam ML_W  = 2*LEN;
 	localparam SID_W = 10*LEN;// session id
-	localparam SEQ_W = 8*LEN; // sequence number
+	localparam SEQ_NUM_W = 8*LEN; // sequence number
 	localparam MH_W  = 20*LEN;// header 
 
 	reg clk = 0;
@@ -14,79 +14,89 @@ module top_test;
 
 	logic [MH_W-1:0]       moldudp_header;
 	logic [ML_W-1:0]       moldudp_msg_len;
-	logic                  upd_axis_tvalid_o;
-	logic [AXI_KEEP_W-1:0] upd_axis_tkeep_o;
-	logic [AXI_DATA_W-1:0] upd_axis_tdata_o;
-	logic                  upd_axis_tlast_o;
-	logic                  upd_axis_tuser_o;
-	logic                  upd_axis_tready_i;
+	logic                  udp_axis_tvalid_i;
+	logic [AXI_KEEP_W-1:0] udp_axis_tkeep_i;
+	logic [AXI_DATA_W-1:0] udp_axis_tdata_i;
+	logic                  udp_axis_tlast_i;
+	logic                  udp_axis_tuser_i;
+	logic                  udp_axis_tready_o;
 
-	logic                  mold_msg_v_i;
-	logic                  mold_msg_start_i;
-	logic [ML_W-1:0]       mold_msg_len_i;
-	logic [AXI_KEEP_W-1:0] mold_msg_mask_i;
-	logic [AXI_DATA_W-1:0] mold_msg_data_i;
+	logic                  mold_msg_v_o;
+	logic                  mold_msg_start_o;
+	logic [ML_W-1:0]       mold_msg_len_o;
+	logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
+	logic [AXI_DATA_W-1:0] mold_msg_data_o;
 
-
+`ifdef MISS_DET
+	logic                 miss_seq_num_v_o;
+	logic [SID_W-1:0]     miss_seq_num_sid_o;
+	logic [SEQ_NUM_W-1:0] miss_seq_num_start_o;	
+	logic [SEQ_NUM_W-1:0] miss_seq_num_cnt_o;
+	logic                 miss_sid_v_o;
+	logic [SID_W-1:0]     miss_sid_start_o;
+	logic [SEQ_NUM_W-1:0] miss_sid_seq_num_start_o;
+	logic [SID_W-1:0]     miss_sid_cnt_o;
+	logic [SEQ_NUM_W-1:0] miss_sid_seq_num_end_o;
+`endif
 	initial
 	begin
  		$dumpfile("build/wave.vcd"); // create a VCD waveform dump called "wave.vcd"
         $dumpvars(0, top_test);
 		$display("Test start");
-		upd_axis_tvalid_o = 1'b0;
-		upd_axis_tkeep_o  = {AXI_KEEP_W{1'bx}};
-		upd_axis_tdata_o  = {AXI_DATA_W{1'bx}};
-		upd_axis_tlast_o  = 1'bx;
-		upd_axis_tuser_o  = 1'bx;
+		udp_axis_tvalid_i = 1'b0;
+		udp_axis_tkeep_i  = {AXI_KEEP_W{1'bx}};
+		udp_axis_tdata_i  = {AXI_DATA_W{1'bx}};
+		udp_axis_tlast_i  = 1'bx;
+		udp_axis_tuser_i  = 1'bx;
 		# 10
 		nreset = 1'b1;
 		#10
 		/* axi stream */ 
-		upd_axis_tvalid_o = 1'b1;	
-		upd_axis_tkeep_o  = {AXI_KEEP_W{ 1'b1}};
-		upd_axis_tlast_o = 1'b0;
-		upd_axis_tuser_o = 1'b0;
+		udp_axis_tvalid_i = 1'b1;	
+		udp_axis_tkeep_i  = {AXI_KEEP_W{ 1'b1}};
+		udp_axis_tlast_i = 1'b0;
+		udp_axis_tuser_i = 1'b0;
 		// header : sid
-		moldudp_header[SID_W-1:0] = 'hDEADBEEF;
+		moldudp_header[SID_W-1:0] = 80'hDEADBEEF;
 		// header : seq num
-		moldudp_header[(SID_W+SEQ_W)-1:SID_W] = 'hF0F0F0F0F0F0F0F0;
+		moldudp_header[(SID_W+SEQ_NUM_W)-1:SID_W] = 64'hF0F0F0F0F0F0F0F0;
 		// header : msg cnt
 		moldudp_header[MH_W-1:MH_W-ML_W] = 'd3;
 
 		moldudp_msg_len = 16'd16;
 		/* Header 0*/
-		upd_axis_tdata_o = moldudp_header[AXI_DATA_W-1:0];
+		udp_axis_tdata_i = moldudp_header[AXI_DATA_W-1:0];
 		#10
 		/* header 1*/
-		upd_axis_tdata_o = moldudp_header[(AXI_DATA_W*2)-1:AXI_DATA_W];
+		udp_axis_tdata_i = moldudp_header[(AXI_DATA_W*2)-1:AXI_DATA_W];
 		#10
 		/* header 2 + msg 0*/
-		upd_axis_tdata_o ={ 16'hffff, moldudp_msg_len, moldudp_header[MH_W-1:AXI_DATA_W*2] };
+		udp_axis_tdata_i ={ 16'hffff, moldudp_msg_len, moldudp_header[MH_W-1:AXI_DATA_W*2] };
 		#10
 		/* payload 0 of msg 0 */
-		upd_axis_tdata_o = {16{4'ha}};
+		udp_axis_tdata_i = {16{4'ha}};
 		#10
 		/* payload 1 of msg 0 + payload 0 of msg 1*/
 		moldudp_msg_len = 16'd8;
-		upd_axis_tdata_o = { moldudp_msg_len, {12{4'hB}}};
+		udp_axis_tdata_i = { moldudp_msg_len, {12{4'hB}}};
 		#10
 		/* payload 1 of msg 1 */
-		upd_axis_tdata_o = {16{4'hD}};
+		udp_axis_tdata_i = {16{4'hD}};
 		#10
 		/* payload 0 of msg 2 */
 		moldudp_msg_len = 16'd11;
-		upd_axis_tdata_o = { {12{4'hE}} , moldudp_msg_len};
+		udp_axis_tdata_i = { {12{4'hE}} , moldudp_msg_len};
 		#10
 		/* payload 1 of msg 2 */
-		upd_axis_tdata_o = {'X , {10{4'hF}}};
-		upd_axis_tkeep_o = { '0, 4'b1111};
-		upd_axis_tlast_o = 1'b1;
+		udp_axis_tdata_i = {'X , {10{4'hF}}};
+		udp_axis_tkeep_i = { '0, 4'b1111};
+		udp_axis_tlast_i = 1'b1;
 		#10
 		/* no msg */
-		upd_axis_tvalid_o = 1'b0;
-		upd_axis_tkeep_o  = 'x;
-		upd_axis_tlast_o  = 'x; 
-		upd_axis_tdata_o  = 'x;
+		udp_axis_tvalid_i = 1'b0;
+		udp_axis_tkeep_i  = 'x;
+		udp_axis_tlast_i  = 'x; 
+		udp_axis_tdata_i  = 'x;
 		#10	
 		#10	
 		#10	
@@ -97,22 +107,42 @@ module top_test;
 	 /* Make a regular pulsing clock. */
 	always #5 clk = !clk;
 
-	top m_top(
+	top #(
+	.AXI_DATA_W(AXI_DATA_W),
+	.AXI_KEEP_W(AXI_KEEP_W),
+	.SID_W(SID_W),
+	.SEQ_NUM_W(SEQ_NUM_W),
+	.ML_W(ML_W),
+	.EOS_MSG_CNT(16'hffff)
+	) m_top(
 	.clk(clk),
 	.nreset(nreset),
 
-	.upd_axis_tvalid_i(upd_axis_tvalid_o),
-	.upd_axis_tkeep_i (upd_axis_tkeep_o ),
-	.upd_axis_tdata_i (upd_axis_tdata_o ),
-	.upd_axis_tlast_i (upd_axis_tlast_o ),
-	.upd_axis_tuser_i (upd_axis_tuser_o ),
-	.upd_axis_tready_o(upd_axis_tready_i),
+	.udp_axis_tvalid_i(udp_axis_tvalid_i),
+	.udp_axis_tkeep_i (udp_axis_tkeep_i ),
+	.udp_axis_tdata_i (udp_axis_tdata_i ),
+	.udp_axis_tlast_i (udp_axis_tlast_i ),
+	.udp_axis_tuser_i (udp_axis_tuser_i ),
+	.udp_axis_tready_o(udp_axis_tready_o),
 
-	.mold_msg_v_o    (mold_msg_v_i    ),
-	.mold_msg_start_o(mold_msg_start_i),
-	.mold_msg_len_o  (mold_msg_len_i  ),
-	.mold_msg_mask_o (mold_msg_mask_i ),
-	.mold_msg_data_o (mold_msg_data_i )
+	`ifdef MISS_DET
+	.miss_seq_num_v_o    (miss_seq_num_v_o),
+	.miss_seq_num_sid_o  (miss_seq_num_sid_o),
+	.miss_seq_num_start_o(miss_seq_num_start_o),	
+	.miss_seq_num_cnt_o  (miss_seq_num_cnt_o),
+		
+	.miss_sid_v_o            (miss_sid_v_o),
+	.miss_sid_start_o        (miss_sid_start_o),
+	.miss_sid_seq_num_start_o(miss_sid_seq_num_start_o),
+	.miss_sid_cnt_o          (miss_sid_cnt_o),
+	.miss_sid_seq_num_end_o  (miss_sid_seq_num_end_o),
+	`endif
+
+	.mold_msg_v_o    (mold_msg_v_o    ),
+	.mold_msg_start_o(mold_msg_start_o),
+	.mold_msg_len_o  (mold_msg_len_o  ),
+	.mold_msg_mask_o (mold_msg_mask_o ),
+	.mold_msg_data_o (mold_msg_data_o )
 	
 	);
 endmodule
