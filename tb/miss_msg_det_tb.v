@@ -1,7 +1,7 @@
 `define SEQ_NUM_W 18
 `define SID_W 80
 `define ML_W 16
-`define SIM_LOOP 3
+`define SIM_LOOP 8
 
 
 module miss_msg_det_tb;
@@ -28,7 +28,8 @@ logic [`SEQ_NUM_W-1:0] miss_sid_seq_num_end_i;
 
 logic      [`SEQ_NUM_W-1:0]  tb_seq = '0;
 logic      [`SID_W-1:0]      tb_sid = '0;
-
+logic      [`SID_W-1:0]      tb_sid_miss_cnt = '0;
+int                          randsid;
 
 always #5 clk = ~clk;
 initial begin
@@ -43,6 +44,11 @@ initial begin
 	// start test
 	for( int i=0; i < `SIM_LOOP ; i++ ) begin
 		new_session();
+		randsid = $random();
+		if ( randsid % 2 == 0 ) begin
+			// skip a session
+			tb_sid_miss_cnt = { '0, randsid};
+		end
 	end
 	
 	#10
@@ -79,6 +85,7 @@ miss_msg_det #(
 	.miss_sid_seq_num_end_o(miss_sid_seq_num_end_i)
 
 );
+
 
 // increment tb
 task new_session();
@@ -117,7 +124,7 @@ task new_session();
 			end else begin
 				// send packet
 				v_o       = 1'b1;
-				sid_o     = tb_sid;
+				sid_o     = tb_sid + tb_sid_miss_cnt;
 				seq_num_o = tb_seq + tb_seq_miss_cnt ;
 				msg_cnt_o = tb_seq_inc;
 				eos_o     = 1'b0;	
@@ -126,12 +133,14 @@ task new_session();
 				`endif
 				// check if miss seen
 				#1
-				check_miss( tb_seq_miss_cnt, '0, tb_seq_seen, tb_sid);
+				check_miss( tb_seq_miss_cnt, tb_sid_miss_cnt, tb_seq_seen, tb_sid);
 				#1
 				// increment
 				tb_seq = tb_seq_exp + tb_seq_miss_cnt;
+				tb_sid = tb_sid + tb_sid_miss_cnt;
 				tb_seq_seen = tb_seq;
 				tb_seq_miss_cnt = '0;
+				tb_sid_miss_cnt = '0;
 				#8
 				check_exp_match( tb_seq, tb_sid );	
 			end
