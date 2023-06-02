@@ -6,7 +6,7 @@
 
 module miss_msg_det_tb;
 
-localparam SID_GAP_MAX =(  1 << 63 );
+localparam SID_GAP_MAX_IDX = `SID_W - 1;
 
 reg clk    = 0;
 reg nreset = 1'b0;	
@@ -62,7 +62,7 @@ miss_msg_det #(
 	.SEQ_NUM_W(`SEQ_NUM_W),
 	.SID_W(`SID_W),
 	.ML_W(`ML_W),
-	.SID_GAP_MAX(SID_GAP_MAX)	
+	.SID_GAP_MAX_IDX(SID_GAP_MAX_IDX)	
 	) m_miss_det (
 	.clk(clk),
 	.nreset(nreset),
@@ -133,7 +133,7 @@ task new_session();
 				`endif
 				// check if miss seen
 				#1
-				check_miss( tb_seq_miss_cnt, tb_sid_miss_cnt, tb_seq_seen, tb_sid);
+				check_miss( tb_seq_miss_cnt, tb_sid_miss_cnt, tb_seq_seen, tb_sid, (tb_seq + tb_seq_miss_cnt ));
 				#1
 				// increment
 				tb_seq = tb_seq_exp + tb_seq_miss_cnt;
@@ -174,7 +174,8 @@ endfunction
 // *_miss_cnt : number of missing messages/sessions not sent to uut
 // *_sent : last index seen by the uut
 function void check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss,
-		logic [`SEQ_NUM_W-1:0] tb_seq_sent, logic [`SID_W-1:0] tb_sid_sent );
+		logic [`SEQ_NUM_W-1:0] tb_seq_sent, logic [`SID_W-1:0] tb_sid_sent,
+		logic [`SEQ_NUM_W-1:0] tb_seq_new );
 	logic seq_miss_match;
 	logic sid_miss_match;
 	sid_miss_match = ( tb_sid_miss != 0 ) == miss_sid_v_i ;
@@ -188,6 +189,13 @@ function void check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-
 		assert( miss_seq_num_sid_i == tb_sid_sent );
 		assert( miss_seq_num_start_i == tb_seq_sent );
 		assert( miss_seq_num_cnt_i == tb_seq_miss_cnt );
+	end
+	// sid
+	if ( tb_sid_miss != 0 ) begin
+		assert( miss_sid_start_i == tb_sid_sent );
+		assert( miss_sid_cnt_i == tb_sid_miss_cnt );
+		assert( miss_sid_seq_num_start_i == tb_seq_sent );
+		assert( miss_sid_seq_num_end_i ==  tb_seq_new );
 	end
 endfunction
 endmodule

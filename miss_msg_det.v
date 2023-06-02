@@ -26,7 +26,7 @@ module miss_msg_det #(
 	parameter SEQ_NUM_W = 64,
 	parameter SID_W     = 80,
 	parameter ML_W      = 16,
-	parameter SID_GAP_MAX = { 1'b1, {SEQ_NUM_W-1{1'b0}} }	
+	parameter SID_GAP_MAX_IDX = SEQ_NUM_W-1	
 )(
 	input clk,
 	input nreset,
@@ -77,8 +77,9 @@ logic [ML_W:0] msg_cnt_add_one;
 // Session id
 assign { sid_add_overflow, sid_add } = sid_q + { {SID_W-1{1'b0}}, 1'b1};
 assign sid_add_v = eos_i;
+// Gap
 assign sid_gap   = sid_i - sid_q;
-assign sid_gap_v = sid_gap < SID_GAP_MAX;  
+assign sid_gap_v = ~(|sid_gap[SID_W-1:SID_GAP_MAX_IDX]);  
 assign sid_lt    = sid_gap_v & ( sid_q < sid_i );
 assign sid_next  = sid_add_v ? sid_add : 
 				   sid_lt ? sid_i : sid_q;
@@ -93,16 +94,18 @@ end
 
 assign miss_sid_v_o     = sid_lt & v_i;
 assign miss_sid_start_o = sid_q;
-assign miss_sid_cnt_o   = seq_gap;
+assign miss_sid_cnt_o   = sid_gap;
+// missing seq numbers [ start ; end [
 assign miss_sid_seq_num_start_o = seq_q;
-assign miss_sid_seq_num_end_o   = 'X;// seq_dec;
+assign miss_sid_seq_num_end_o   = seq_num_i;
 
 // Sequence number
 // Increment by 1 so we see the next expected sequence number ( even on heartbeat ) 
 assign msg_cnt_add_one = msg_cnt_i + {{ML_W-1{1'b0}}, 1'b1}; 
+
 assign { seq_add_overflow,     seq_add     } = seq_q     + { {SEQ_NUM_W-ML_W-1{1'b0}}, msg_cnt_add_one };
 assign { seq_gap_add_overflow, seq_gap_add } = seq_num_i + { {SEQ_NUM_W-ML_W-1{1'b0}}, msg_cnt_add_one }; 
-// TODO : Support when message sequence overlap and the gap is only partial
+
 assign sid_match = sid_q == sid_i;
 assign seq_gap   = seq_num_i - seq_q;
 assign seq_lt    = seq_q < seq_num_i;
