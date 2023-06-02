@@ -2,6 +2,8 @@
 `define SID_W 80
 `define ML_W 16
 `define SIM_LOOP 3
+
+
 module miss_msg_det_tb;
 
 localparam SID_GAP_MAX =(  1 << 63 );
@@ -78,26 +80,6 @@ miss_msg_det #(
 
 );
 
-task send_pkt(input logic [`SEQ_NUM_W-1] tb_seq_inc, input logic [`SEQ_NUM_W-1:0] tb_seq_exp, inout logic [`SEQ_NUM_W-1] tb_seq_miss_cnt);
-	// send packet 
-	v_o       = 1'b1;
-	sid_o     = tb_sid;
-	seq_num_o = tb_seq + tb_seq_miss_cnt ;
-	msg_cnt_o = tb_seq_inc;
-	eos_o     = 1'b0;	
-	// increment
-	tb_seq = tb_seq_exp + tb_seq_miss_cnt;
-	`ifdef DEBUG
-	$display("%t write seq_num %d, msg_cnt %d", $time, tb_seq, tb_seq_inc);
-	`endif
-	// check if miss seen
-	#1
-	check_miss( tb_seq_miss_cnt, '0);
-	tb_seq_miss_cnt = '0;
-	#9
-	check_exp_match( tb_seq, tb_sid );
-endtask
-
 // increment tb
 task new_session();
 	int                    randvar;	
@@ -106,6 +88,7 @@ task new_session();
 	logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt = '0;
 	logic                  tb_inc_sid;
 	logic [`SEQ_NUM_W-1:0] tb_seq_exp;
+	logic [`SEQ_NUM_W-1:0] tb_seq_seen = '0;
 	$display("Task start");
 	do begin
 		// No support for std::randomize in icarus verilog, it being only 32
@@ -120,7 +103,7 @@ task new_session();
 			if (randvar % 4 == 0 ) begin
 				// don't send packet, increment miss cnt
 				v_o = 1'b0;
-				tb_seq_miss_cnt = tb_seq_inc;
+				tb_seq_miss_cnt = tb_seq_inc + tb_seq_miss_cnt;
 				#10
 				v_o = 1'b0; // prevent syntax error
 				`ifdef DEBUG
@@ -128,7 +111,24 @@ task new_session();
 				`endif
 			end else begin
 				// send packet
-				send_pkt(tb_seq_inc, tb_seq_exp, tb_seq_miss_cnt);
+				v_o       = 1'b1;
+				sid_o     = tb_sid;
+				seq_num_o = tb_seq + tb_seq_miss_cnt ;
+				msg_cnt_o = tb_seq_inc;
+				eos_o     = 1'b0;	
+				`ifdef DEBUG
+				$display("%t write seq_num %d, msg_cnt %d", $time, tb_seq, tb_seq_inc);
+				`endif
+				// check if miss seen
+				#1
+				check_miss( tb_seq_miss_cnt, '0, tb_seq_seen, tb_sid);
+				#1
+				// increment
+				tb_seq = tb_seq_exp + tb_seq_miss_cnt;
+				tb_seq_seen = tb_seq;
+				tb_seq_miss_cnt = '0;
+				#8
+				check_exp_match( tb_seq, tb_sid );	
 			end
 		end
 	end while (tb_seq_inc_overflow == 1'b0 );
@@ -157,12 +157,23 @@ function check_exp_match( logic [`SEQ_NUM_W-1:0] tb_seq, logic [`SID_W-1:0] tb_s
 endfunction
 
 // check miss signals
-function check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss);
+// *_miss_cnt : number of missing messages/sessions not sent to uut
+// *_sent : last index seen by the uut
+function check_miss( logic [`SEQ_NUM_W-1:0] tb_seq_miss_cnt, logic [`SID_W-1:0] tb_sid_miss,
+		logic [`SEQ_NUM_W-1:0] tb_seq_sent, logic [`SID_W-1:0] tb_sid_sent );
 	logic seq_miss_match;
 	logic sid_miss_match;
 	sid_miss_match = ( tb_sid_miss != 0 ) == miss_sid_v_i ;
 	seq_miss_match =  ( tb_sid_miss != 0 ) | ( ( tb_sid_miss == 0 ) & (( tb_seq_miss_cnt != 0 ) == miss_seq_num_v_i  )) ;
 	assert ( sid_miss_match );
 	assert ( seq_miss_match );
+
+	// check metadata for replay
+	// seq num 
+	if (( tb_seq_miss_cnt != 0 ) & ( tb_sid_miss == 0 )) begin
+		assert( miss_seq_num_sid_i == tb_sid_sent );
+		assert( miss_seq_num_start_i == tb_seq_sent );
+		assert( miss_seq_num_cnt_i == tb_seq_miss_cnt );
+	end
 endfunction
 endmodule

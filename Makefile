@@ -20,7 +20,7 @@ header: header.v
 miss_msg_det: miss_msg_det.v
 	iverilog ${FLAGS} -s miss_msg_det -o ${BUILD}/miss_msg_det_tb miss_msg_det.v
 
-miss_msg_det_tb: miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
+miss_msg_det_tb: miss_msg_det ${TB_DIR}/miss_msg_det_tb.v
 	iverilog ${FLAGS} -s miss_msg_det_tb -D${SIMDEF} -o ${BUILD}/miss_msg_det_tb miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
 	vvp ${BUILD}/miss_msg_det_tb
 
