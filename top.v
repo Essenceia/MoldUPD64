@@ -399,7 +399,7 @@ len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_flop_msg_mask(
 );
 
 generate 
-	for ( j = 0; j < AXI_KEEP_W-1; j++) begin
+	for ( j = 0; j < AXI_KEEP_W; j++) begin
 		if ( j == AXI_KEEP_W-1 ) begin
 			assign msg_data[j*8+7:j*8] = {8{flop_msg_mask[j]}} & 8'bx
 									   | {8{~flop_msg_mask[j]}} & axis_msg_tdata_shifted[j*8+7:j*8];
@@ -476,6 +476,7 @@ assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 
 assign mold_msg_v_o       = msg_v; 
 assign mold_msg_data_o    = msg_data; 
+assign mold_msg_start_o   = 'X; 
 assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
 assign mold_msg_sid_o     = sid_q;
 assign mold_msg_seq_num_o = seq_q;

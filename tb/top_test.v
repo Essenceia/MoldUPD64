@@ -1,4 +1,3 @@
-`timescale 1ns/100ps
 
 module top_test;
 	localparam AXI_DATA_W = 64;
@@ -23,7 +22,6 @@ module top_test;
 
 	logic                  mold_msg_v_o;
 	logic                  mold_msg_start_o;
-	logic [ML_W-1:0]       mold_msg_len_o;
 	logic [SEQ_NUM_W-1:0]  mold_msg_seq_num_o;
 	logic [SID_W-1:0]      mold_msg_sid_o;
 	logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
@@ -150,15 +148,33 @@ module top_test;
 
 	.mold_msg_v_o    (mold_msg_v_o    ),
 	.mold_msg_start_o(mold_msg_start_o),
-	.mold_msg_len_o  (mold_msg_len_o  ),
 	.mold_msg_mask_o (mold_msg_mask_o ),
 	.mold_msg_data_o (mold_msg_data_o )
 	
 	);
-
+// xchecks
 always @(posedge clk) begin
 	if ( nreset ) begin
 		assert( ~$isunknown(mold_msg_v_o));
+		if ( mold_msg_v_o ) begin
+			assert( ~$isunknown(mold_msg_start_o));
+			assert( ~$isunknown(mold_msg_seq_num_o));
+			assert( ~$isunknown(mold_msg_sid_o));
+			assert( ~$isunknown(mold_msg_mask_o));
+			end
 	end
 end
+
+genvar i;
+generate
+for( i = 0; i < AXI_KEEP_W; i++) begin
+	always @(posedge clk) begin
+		if ( nreset & mold_msg_v_o ) begin
+			assert( ~$isunknown( {8{mold_msg_mask_o[i]}} & mold_msg_data_o[8*i+7:8*i]));
+		end
+	end
+end
+endgenerate
+
+
 endmodule
