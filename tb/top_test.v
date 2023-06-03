@@ -22,10 +22,13 @@ module top_test;
 
 	logic                  mold_msg_v_o;
 	logic                  mold_msg_start_o;
-	logic [SEQ_NUM_W-1:0]  mold_msg_seq_num_o;
-	logic [SID_W-1:0]      mold_msg_sid_o;
 	logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
 	logic [AXI_DATA_W-1:0] mold_msg_data_o;
+	
+	`ifdef MOLD_MSG_IDS
+	logic [SID_W-1:0]      mold_msg_sid_o;
+	logic [SEQ_NUM_W-1:0]  mold_msg_seq_num_o;
+	`endif
 
 	`ifdef MISS_DET
 	logic                 miss_seq_num_v_o;
@@ -146,6 +149,11 @@ module top_test;
 	.flatlined_v_o   (flatlined_v_o     ),
 	`endif
 
+	`ifdef MOLD_MSG_IDS
+	.mold_msg_sid_o    (mold_msg_sid_o    ),
+	.mold_msg_seq_num_o(mold_msg_seq_num_o),
+	`endif
+
 	.mold_msg_v_o    (mold_msg_v_o    ),
 	.mold_msg_start_o(mold_msg_start_o),
 	.mold_msg_mask_o (mold_msg_mask_o ),
@@ -158,9 +166,11 @@ always @(posedge clk) begin
 		assert( ~$isunknown(mold_msg_v_o));
 		if ( mold_msg_v_o ) begin
 			assert( ~$isunknown(mold_msg_start_o));
+			assert( ~$isunknown(mold_msg_mask_o));
+			`ifdef MOLD_MSG_IDS
 			assert( ~$isunknown(mold_msg_seq_num_o));
 			assert( ~$isunknown(mold_msg_sid_o));
-			assert( ~$isunknown(mold_msg_mask_o));
+			`endif
 			end
 	end
 end

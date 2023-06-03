@@ -48,12 +48,14 @@ module top #(
 	`ifdef HEARTBEAT
 	output logic            flatlined_v_o,
 	`endif
-	// Mold message
+
+	`ifdef MOLD_MSG_IDS	
+	output [SID_W-1:0]      mold_msg_sid_o,
+	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,// Mold message
+	`endif
+
 	output                  mold_msg_v_o,
 	output                  mold_msg_start_o, // start of a new msg
-	output [ML_W-1:0]       mold_msg_len_o,
-	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,
-	output [SID_W-1:0]      mold_msg_sid_o,
 	output [AXI_KEEP_W-1:0] mold_msg_mask_o,
 	output [AXI_DATA_W-1:0] mold_msg_data_o
 
@@ -68,6 +70,7 @@ localparam DATA_DIF_W  = AXI_DATA_W - DFF_DATA_W; // 8
 reg   [SID_W-1:0]     sid_q;
 logic [SID_W-1:0]     sid_next;
 
+`ifdef MOLD_MSG_IDS
 reg   [SEQ_NUM_W-1:0] seq_q;
 logic [SEQ_NUM_W-1:0] seq_next;
 logic [SEQ_NUM_W-1:0] seq_add;
@@ -75,6 +78,10 @@ logic                 seq_add_overflow;
 logic                 seq_msb_en;
 logic                 seq_lsb_en;
 logic                 seq_en;
+`else
+reg   [47:0]          seq_q;
+logic [47:0]          seq_next;
+`endif
 
 logic        init_sid_p0_v; 
 logic [63:0] init_sid_p0;
@@ -214,16 +221,14 @@ always @(posedge clk) begin
 		sid_q[63:0] <= init_sid_p0;
 	if( init_sid_p1_v ) 
 		sid_q[79:64] <= init_sid_p1;
-	if( init_seq_num_p0_v )
-		seq_q[47:0] <= init_seq_num_p0;
-	if( init_seq_num_p1_v) 
-		seq_q[63:48] <= init_seq_num_p1;
 end
 // seq
+`ifdef MOLD_MSG_IDS
 assign { seq_add_overflow, seq_add } = seq_q + {{SEQ_NUM_W-1{1'b0}}, 1'b1};
-assign seq_next = msg_end ? seq_add : { init_seq_num_p1, init_seq_num_p0 };
+assign seq_next[47:0]  = init_seq_num_p0_v ? init_seq_num_p0 : seq_add[47:0];
+assign seq_next[63:48] = init_seq_num_p1_v ? init_seq_num_p1 : seq_add[63:48];
 
-assign seq_en     = msg_end;
+assign seq_en     = msg_end & msg_v;
 assign seq_msb_en = seq_en | init_seq_num_p1_v;
 assign seq_lsb_en = seq_en | init_seq_num_p0_v;
 
@@ -233,7 +238,12 @@ always @(posedge clk) begin
 	if( seq_msb_en ) 
 		seq_q[63:48] <= seq_next[63:48];
 end
-
+`else
+always @(posedge clk) begin
+	if( init_seq_num_p0_v )
+		seq_q[47:0] <= init_seq_num_p0;
+end
+`endif
 // End-Of-Session 
 assign init_eos = init_msg_cnt == EOS_MSG_CNT;
 
@@ -478,8 +488,12 @@ assign mold_msg_v_o       = msg_v;
 assign mold_msg_data_o    = msg_data; 
 assign mold_msg_start_o   = 'X; 
 assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
+
+`ifdef MOLD_MSG_IDS
 assign mold_msg_sid_o     = sid_q;
 assign mold_msg_seq_num_o = seq_q;
+`endif
+
 `ifdef FORMAL
 
 logic [0:7] fsm_f;
