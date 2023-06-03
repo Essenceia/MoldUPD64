@@ -105,7 +105,9 @@ logic                   msg_end;
 logic                   msg_end_align;
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
+logic                   cnt_en;
 logic                   cnt_end;
+logic                   cnt_end_next;
 
 
 logic                  msg_v;
@@ -294,7 +296,7 @@ assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|flop_shift; // msg end ali
  
 // init msg
 assign init_msg_len_v = fsm_h2_msg_q 
-			          | (msg_v & msg_end & ~msg_end_align)
+			          | (msg_v & msg_end & ~msg_end_align & ~cnt_end )
 					  | fsm_msg_len_split_q 
 					  | fsm_msg_len_align_q; 
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( udp_axis_tdata_q[32+ML_W-1:32] - 'd2 )// TODO : support 1st msg len=0
@@ -411,8 +413,11 @@ endgenerate
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
-					  msg_end ? msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 } : msg_cnt_q;
-assign cnt_end = ~|msg_cnt_next; 
+					  (msg_end & ~cnt_end) ? msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 } : msg_cnt_q;
+assign cnt_end_next = ~|msg_cnt_next;
+assign cnt_end = ~|msg_cnt_q;
+
+assign cnt_en = init_msg_cnt_v | ~cnt_end;
 always @(posedge clk)
 begin
 	msg_cnt_q <= msg_cnt_next;	
@@ -420,7 +425,7 @@ end
 // fsm
 
 assign fsm_invalid_next = fsm_invalid_q & ~udp_axis_tvalid_i // first payload received
-						| fsm_msg_q & ( msg_end & cnt_end );
+						| fsm_msg_q & ( msg_end & cnt_end_next );
 // header 
 // hX  : header is received over multiple cycles 
 // msg : during last cycle part of the packed is the begining of the message
@@ -432,15 +437,15 @@ assign fsm_h2_msg_next = fsm_h1_q;
 // overlap : part of the next axi payload is of a different modludp64 message
 //           it will be routed to the free moldudp64 module
 assign fsm_msg_next = fsm_h2_msg_q 
-					| (fsm_msg_q & ~(msg_end & cnt_end) & ~( fsm_msg_len_split_next | fsm_msg_len_align_next ))
+					| (fsm_msg_q & ~(msg_end & cnt_end_next) & ~( fsm_msg_len_split_next | fsm_msg_len_align_next ))
 					| fsm_msg_len_split_q
 					| fsm_msg_len_align_q;
 
 assign fsm_msg_overlap_next   = 1'b0;  
 // msg len split over 2 AXI payloads
-assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end & (flop_shift == 'd1);
+assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & (flop_shift == 'd1);
 // msg len missing : present in start of the next packet
-assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end & msg_end_align;
+assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_end_align;
 
 always @(posedge clk)
 begin
