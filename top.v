@@ -112,6 +112,9 @@ logic                   msg_end;
 logic                   msg_end_align;
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
+logic                   msg_start_lite_next;
+reg                     msg_start_lite_q;
+
 logic                   cnt_en;
 logic                   cnt_end;
 logic                   cnt_end_next;
@@ -298,6 +301,11 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 );
 
 assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_split_q;
+
+assign msg_start_lite_next = fsm_h2_msg_q | ( msg_v & msg_end ) | fsm_msg_len_align_q;
+always @(posedge clk) begin
+	msg_start_lite_q <= msg_start_lite_next;
+end
 // decrement the number of bytes of the current message that have been
 // recieved ( ! not sent ) 
 assign msg_len_zero  = ~|msg_len_q;
@@ -486,7 +494,7 @@ assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 
 assign mold_msg_v_o       = msg_v; 
 assign mold_msg_data_o    = msg_data; 
-assign mold_msg_start_o   = 'X; 
+assign mold_msg_start_o   = msg_start_lite_q & msg_v; 
 assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
 
 `ifdef MOLD_MSG_IDS
