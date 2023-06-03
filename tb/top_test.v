@@ -24,6 +24,8 @@ module top_test;
 	logic                  mold_msg_v_o;
 	logic                  mold_msg_start_o;
 	logic [ML_W-1:0]       mold_msg_len_o;
+	logic [SEQ_NUM_W-1:0]  mold_msg_seq_num_o;
+	logic [SID_W-1:0]      mold_msg_sid_o;
 	logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
 	logic [AXI_DATA_W-1:0] mold_msg_data_o;
 
@@ -153,4 +155,10 @@ module top_test;
 	.mold_msg_data_o (mold_msg_data_o )
 	
 	);
+
+always @(posedge clk) begin
+	if ( nreset ) begin
+		assert( ~$isunknown(mold_msg_v_o));
+	end
+end
 endmodule

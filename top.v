@@ -52,6 +52,8 @@ module top #(
 	output                  mold_msg_v_o,
 	output                  mold_msg_start_o, // start of a new msg
 	output [ML_W-1:0]       mold_msg_len_o,
+	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,
+	output [SID_W-1:0]      mold_msg_sid_o,
 	output [AXI_KEEP_W-1:0] mold_msg_mask_o,
 	output [AXI_DATA_W-1:0] mold_msg_data_o
 
@@ -65,8 +67,14 @@ localparam DATA_DIF_W  = AXI_DATA_W - DFF_DATA_W; // 8
 // header data
 reg   [SID_W-1:0]     sid_q;
 logic [SID_W-1:0]     sid_next;
+
 reg   [SEQ_NUM_W-1:0] seq_q;
 logic [SEQ_NUM_W-1:0] seq_next;
+logic [SEQ_NUM_W-1:0] seq_add;
+logic                 seq_add_overflow;
+logic                 seq_msb_en;
+logic                 seq_lsb_en;
+logic                 seq_en;
 
 logic        init_sid_p0_v; 
 logic [63:0] init_sid_p0;
@@ -198,6 +206,7 @@ header m_header(
 	.msg_cnt_v_o(init_msg_cnt_v),
 	.msg_cnt_o  (init_msg_cnt)
 );
+// sid
 always @(posedge clk) begin
 	if( init_sid_p0_v )
 		sid_q[63:0] <= init_sid_p0;
@@ -208,7 +217,22 @@ always @(posedge clk) begin
 	if( init_seq_num_p1_v) 
 		seq_q[63:48] <= init_seq_num_p1;
 end
+// seq
+assign { seq_add_overflow, seq_add } = seq_q + {{SEQ_NUM_W-1{1'b0}}, 1'b1};
+assign seq_next = msg_end ? seq_add : { init_seq_num_p1, init_seq_num_p0 };
 
+assign seq_en     = msg_end;
+assign seq_msb_en = seq_en | init_seq_num_p1_v;
+assign seq_lsb_en = seq_en | init_seq_num_p0_v;
+
+always @(posedge clk) begin
+	if( seq_lsb_en )
+		seq_q[47:0] <= seq_next[47:0];
+	if( seq_msb_en ) 
+		seq_q[63:48] <= seq_next[63:48];
+end
+
+// End-Of-Session 
 assign init_eos = init_msg_cnt == EOS_MSG_CNT;
 
 `ifdef MISS_DET
@@ -445,10 +469,11 @@ end
 // output
 assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet 
 
-assign mold_msg_v_o    = msg_v; 
-assign mold_msg_data_o = msg_data; 
-assign mold_msg_mask_o = msg_end ? msg_mask : '1; 
-
+assign mold_msg_v_o       = msg_v; 
+assign mold_msg_data_o    = msg_data; 
+assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
+assign mold_msg_sid_o     = sid_q;
+assign mold_msg_seq_num_o = seq_q;
 `ifdef FORMAL
 
 logic [0:7] fsm_f;
@@ -491,6 +516,9 @@ always @(posedge clk) begin
 		// into the output message, flop shift is designed to hold a max of
 		// 56 bits, not the full 64
 		sva_flop_holds_partial_msg : assert ( ~msg_v | ( msg_v & ~flop_msg_mask[AXI_KEEP_W-1] ));
+
+		// no msg_end on h1 of header, would break seq_next mux logic
+		sva_header_msg_end_zero : assert ( ~fsm_h1_q  | (  fsm_h1_q  & ~msg_end ));
 
 	end
 end
