@@ -10,8 +10,8 @@ module len_to_mask #(
 	parameter LEN_W   = 4, 
 	parameter LEN_MAX = 8 // max length in decimal
 )(
-	input [LEN_W-1:0]      len_i,
-	output logic [LEN_MAX] mask_o
+	input        [LEN_W-1:0]   len_i,
+	output logic [LEN_MAX-1:0] mask_o
 );
 	
 genvar i;
