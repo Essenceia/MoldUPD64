@@ -7,7 +7,7 @@ parameter SID_W = 10*LEN;// session id
 parameter SEQ_NUM_W = 8*LEN; // sequence number
 parameter MH_W  = 20*LEN;// header 
 
-module top_test;	
+module moldudp64_tb;	
 reg clk = 0;
 reg nreset = 1'b0;	
 
@@ -48,7 +48,7 @@ logic flatlined_v_o;
 initial
 begin
 	$dumpfile("build/wave.vcd"); // create a VCD waveform dump called "wave.vcd"
-    $dumpvars(0, top_test);
+    $dumpvars(0, moldudp64_tb);
 	$display("Test start");
 	udp_axis_tvalid_i = 1'b0;
 	udp_axis_tkeep_i  = {AXI_KEEP_W{1'bx}};
@@ -114,14 +114,14 @@ end
  /* Make a regular pulsing clock. */
 always #5 clk = !clk;
 
-top #(
+moldudp64 #(
 	.AXI_DATA_W(AXI_DATA_W),
 	.AXI_KEEP_W(AXI_KEEP_W),
 	.SID_W(SID_W),
 	.SEQ_NUM_W(SEQ_NUM_W),
 	.ML_W(ML_W),
 	.EOS_MSG_CNT(16'hffff)
-) m_top(
+) m_moldudp64(
 	.clk(clk),
 	.nreset(nreset),
 	

@@ -8,7 +8,7 @@
 
 /* Module is a slave connected to an AXI steam interface */
 
-module top #(
+module moldudp64 #(
 	parameter AXI_DATA_W  = 64,
 	parameter AXI_KEEP_W  = 8,
 	parameter SID_W       = 80,
