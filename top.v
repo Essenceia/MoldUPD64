@@ -146,7 +146,6 @@ logic [7:0]       init_msg_len_p0;
 logic [7:0]       init_msg_len_p0_q;// flopped in case of len cut over 2 payloads
 logic [7:0]       init_msg_len_p1;
 
-logic                   unused_msg_mask_int;
 logic [AXI_KEEP_LW-1:0] msg_mask_int;
 logic [AXI_KEEP_W-1:0]  msg_mask;
 
@@ -317,7 +316,7 @@ assign init_msg_len_v = fsm_h2_msg_q
 			          | (msg_v & msg_end & ~msg_end_align & ~cnt_end )
 					  | fsm_msg_len_split_q 
 					  | fsm_msg_len_align_q; 
-assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( udp_axis_tdata_q[32+ML_W-1:32] - 'd2 )// TODO : support 1st msg len=0
+assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( udp_axis_tdata_q[32+ML_W-1:32] )// TODO : support 1st msg len=0
 					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
 
@@ -332,11 +331,12 @@ begin
 	msg_len_q  <= msg_len_next;
 end
 // output mask
-assign { unused_msg_mask_int , msg_mask_int } = msg_len_q[AXI_KEEP_LW-1:0] ; 
+assign msg_mask_int ={ |msg_len_q[ML_W-1:AXI_KEEP_LW-1] ,  msg_len_q[AXI_KEEP_LW-2:0] }; 
 len_to_mask #(.LEN_W(AXI_KEEP_LW), .LEN_MAX(AXI_KEEP_W)) m_msg_end_mask(
 	.len_i(msg_mask_int),
 	.mask_o(msg_mask)
 );
+
 // len
 logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
@@ -385,7 +385,6 @@ assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2
 // TODO : move declaration to top ?
 logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W:0];
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W:0];
-
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = udp_axis_tdata_q[AXI_DATA_W-1:0]; 
@@ -495,7 +494,8 @@ assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 assign mold_msg_v_o       = msg_v; 
 assign mold_msg_data_o    = msg_data; 
 assign mold_msg_start_o   = msg_start_lite_q & msg_v; 
-assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
+//assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
+assign mold_msg_mask_o = msg_mask;
 
 `ifdef MOLD_MSG_IDS
 assign mold_msg_sid_o     = sid_q;
