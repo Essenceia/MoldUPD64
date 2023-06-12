@@ -68,9 +68,9 @@ begin
 	// header : seq num
 	moldudp_header[(SID_W+SEQ_NUM_W)-1:SID_W] = 64'hF0F0F0F0F0F0F0F0;
 	// header : msg cnt
-	moldudp_header[MH_W-1:MH_W-ML_W] = 'd3;
+	moldudp_header[MH_W-1:MH_W-ML_W] = { 8'd3, 8'd0 };
 
-	moldudp_msg_len = 16'd16;
+	moldudp_msg_len = { 8'd16, 8'd0 };
 	/* Header 0*/
 	udp_axis_tdata_i = moldudp_header[AXI_DATA_W-1:0];
 	#10
@@ -84,14 +84,14 @@ begin
 	udp_axis_tdata_i = {16{4'ha}};
 	#10
 	/* payload 1 of msg 0 + payload 0 of msg 1*/
-	moldudp_msg_len = 16'd8;
+	moldudp_msg_len = { 8'd8, 8'd0 };
 	udp_axis_tdata_i = { moldudp_msg_len, {12{4'hB}}};
 	#10
 	/* payload 1 of msg 1 */
 	udp_axis_tdata_i = {16{4'hD}};
 	#10
 	/* payload 0 of msg 2 */
-	moldudp_msg_len = 16'd11;
+	moldudp_msg_len = { 8'd11, 8'd0 };
 	udp_axis_tdata_i = { {12{4'hE}} , moldudp_msg_len};
 	#10
 	/* payload 1 of msg 2 */

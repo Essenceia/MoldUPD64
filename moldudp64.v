@@ -100,6 +100,7 @@ logic [ML_W-1:0] init_msg_cnt;
 logic            init_eos;// end of session
 reg   [ML_W-1:0] msg_len_q;
 logic [ML_W-1:0] msg_len_next;
+logic [ML_W-1:0] header_msg_len;
 logic [ML_W-1:0] init_msg_len;
 logic            init_msg_len_v;
 
@@ -143,7 +144,7 @@ logic [AXI_KEEP_LW-1:0] axis_flop_tdata_shift;
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted;
 // length
 logic [7:0]       init_msg_len_p0;
-logic [7:0]       init_msg_len_p0_q;// flopped in case of len cut over 2 payloads
+logic [7:0]       init_msg_len_p1_q;// flopped in case of len cut over 2 payloads
 logic [7:0]       init_msg_len_p1;
 
 logic [AXI_KEEP_LW-1:0] msg_mask_int;
@@ -312,13 +313,14 @@ assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW
 assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|flop_shift; // msg end aligns with the end of the AXI payload
  
 // init msg
+endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_o(header_msg_len));
 assign init_msg_len_v = fsm_h2_msg_q 
 			          | (msg_v & msg_end & ~msg_end_align & ~cnt_end )
 					  | fsm_msg_len_split_q 
 					  | fsm_msg_len_align_q; 
-assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & ( udp_axis_tdata_q[32+ML_W-1:32] )// TODO : support 1st msg len=0
+assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & header_msg_len // TODO : support 1st msg len=0
 					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
-					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1 ,init_msg_len_p0_q} ;// len split over 2 axi payloads
+					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1_q ,init_msg_len_p0} ;// len split over 2 axi payloads
 
 assign msg_len_got     = ( {AXI_KEEP_LW{udp_axis_tvalid_q}} & udp_axis_data_len) + flop_len_q;
 assign msg_len_got_sat = ( msg_len_got[3] ) ? {{AXI_KEEP_LW-4{1'b0}} , 4'd8} : msg_len_got[AXI_KEEP_LW-1:0] ; 
@@ -342,12 +344,12 @@ logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
 genvar j;
 generate 
-	assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[7:0];	
-	assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[15:8];	
+	assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[15:8]; // big endian to little endian	
+	assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[7:0];	
 	for(j=1; j<AXI_KEEP_W; j++) begin
-		assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[63-8*(j-1): 64-8*j];
-		if ( j == 1 ) assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[7:0];
-		else assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
+		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[63-8*(j-1): 64-8*j];
+		if ( j == 1 ) assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[7:0];
+		else assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
 	end
 endgenerate
 assign len_shift = flop_shift & {ML_W{~fsm_msg_len_align_q}};
@@ -362,7 +364,7 @@ end
 // init message len : flop if lenght ( 2 bytes ) are spread over 2 different
 // AXI payloads
 always @(posedge clk) begin
-	init_msg_len_p0_q <= init_msg_len_p0;
+	init_msg_len_p1_q <= init_msg_len_p1;
 end
 
 
