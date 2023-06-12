@@ -27,8 +27,10 @@ miss_msg_det_tb: miss_msg_det ${TB_DIR}/miss_msg_det_tb.v
 	iverilog ${FLAGS} -s miss_msg_det_tb ${DEFINES} -o ${BUILD}/miss_msg_det_tb miss_msg_det.v ${TB_DIR}/miss_msg_det_tb.v
 	vvp ${BUILD}/miss_msg_det_tb
 
-top: top.v ${TB_DIR}/top_test.v cnt_ones_thermo header len_to_mask miss_msg_det countdown
-	iverilog ${FLAGS} -s moldudp64_tb ${DEFINES} -o ${BUILD}/top cnt_ones_thermo.v countdown.v len_to_mask.v header.v miss_msg_det.v top.v ${TB_DIR}/top_test.v
+top: moldudp64.v ${TB_DIR}/top_test.v cnt_ones_thermo header len_to_mask miss_msg_det countdown
+	iverilog ${FLAGS} -s moldudp64_tb ${DEFINES} -o ${BUILD}/top cnt_ones_thermo.v countdown.v len_to_mask.v header.v miss_msg_det.v moldudp64.v ${TB_DIR}/top_test.v
+
+lib:top
 
 run: top
 	vvp ${BUILD}/top

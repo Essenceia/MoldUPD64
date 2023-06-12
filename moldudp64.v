@@ -494,8 +494,8 @@ assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet
 assign mold_msg_v_o       = msg_v; 
 assign mold_msg_data_o    = msg_data; 
 assign mold_msg_start_o   = msg_start_lite_q & msg_v; 
-//assign mold_msg_mask_o    = msg_end ? msg_mask : '1; 
-assign mold_msg_mask_o = msg_mask;
+//assign mold_msg_mask_o  = msg_end ? msg_mask : '1; 
+assign mold_msg_mask_o    = msg_mask;
 
 `ifdef MOLD_MSG_IDS
 assign mold_msg_sid_o     = sid_q;
