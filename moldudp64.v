@@ -84,13 +84,13 @@ logic [47:0]          seq_next;
 `endif
 
 logic        init_sid_p0_v; 
-logic [63:0] init_sid_p0;
+logic [15:0] init_sid_p0;
 logic        init_sid_p1_v;
-logic [15:0] init_sid_p1;
+logic [63:0] init_sid_p1;
 logic        init_seq_num_p0_v;
-logic [47:0] init_seq_num_p0;
+logic [15:0] init_seq_num_p0;
 logic        init_seq_num_p1_v;
-logic [15:0] init_seq_num_p1;
+logic [47:0] init_seq_num_p1;
 	
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
@@ -210,25 +210,25 @@ header m_header(
 	.sid_p0_o  (init_sid_p0),
 	.sid_p1_v_o(init_sid_p1_v),
 	.sid_p1_o  (init_sid_p1),
-	.seq_num_p0_v_o(init_seq_num_p0_v),
-	.seq_num_p0_o  (init_seq_num_p0),
-	.seq_num_p1_v_o(init_seq_num_p1_v),
-	.seq_num_p1_o  (init_seq_num_p1),
+	.seq_p0_v_o(init_seq_num_p0_v),
+	.seq_p0_o  (init_seq_num_p0),
+	.seq_p1_v_o(init_seq_num_p1_v),
+	.seq_p1_o  (init_seq_num_p1),
 	.msg_cnt_v_o(init_msg_cnt_v),
 	.msg_cnt_o  (init_msg_cnt)
 );
 // sid
 always @(posedge clk) begin
 	if( init_sid_p0_v )
-		sid_q[63:0] <= init_sid_p0;
+		sid_q[7:0] <= init_sid_p0;
 	if( init_sid_p1_v ) 
-		sid_q[79:64] <= init_sid_p1;
+		sid_q[78:7] <= init_sid_p1;
 end
 // seq
 `ifdef MOLD_MSG_IDS
 assign { seq_add_overflow, seq_add } = seq_q + {{SEQ_NUM_W-1{1'b0}}, 1'b1};
-assign seq_next[47:0]  = init_seq_num_p0_v ? init_seq_num_p0 : seq_add[47:0];
-assign seq_next[63:48] = init_seq_num_p1_v ? init_seq_num_p1 : seq_add[63:48];
+assign seq_next[15:0]  = init_seq_num_p0_v ? init_seq_num_p0 : seq_add[15:0];
+assign seq_next[63:16] = init_seq_num_p1_v ? init_seq_num_p1 : seq_add[63:16];
 
 assign seq_en     = msg_end & msg_v;
 assign seq_msb_en = seq_en | init_seq_num_p1_v;
@@ -236,14 +236,14 @@ assign seq_lsb_en = seq_en | init_seq_num_p0_v;
 
 always @(posedge clk) begin
 	if( seq_lsb_en )
-		seq_q[47:0] <= seq_next[47:0];
+		seq_q[15:0] <= seq_next[15:0];
 	if( seq_msb_en ) 
-		seq_q[63:48] <= seq_next[63:48];
+		seq_q[63:16] <= seq_next[63:16];
 end
 `else
 always @(posedge clk) begin
 	if( init_seq_num_p0_v )
-		seq_q[47:0] <= init_seq_num_p0;
+		seq_q[63:16] <= init_seq_num_p1;
 end
 `endif
 // End-Of-Session 
@@ -261,7 +261,7 @@ miss_msg_det #(
 
 	.v_i      (fsm_h2_msg_q                  ),
 	.sid_i    (sid_q                         ),
-	.seq_num_i({init_seq_num_p1, seq_q[47:0]}),
+	.seq_num_i({seq_q[63:16], init_seq_num_p0}),
 	.msg_cnt_i(init_msg_cnt                  ),
 	.eos_i    (init_eos                      ), // end of session
  
