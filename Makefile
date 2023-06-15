@@ -1,8 +1,12 @@
+ifndef debug
+#debug :=
+endif
+
 TB_DIR=tb
 BUILD=build
 CONF=conf
 FLAGS=-Wall -g2012 -gassertions -gstrict-expr-width
-DEFINES=-DMISS_DET -DHEARTBEAT -DMOLD_MSG_IDS
+DEFINES=-DMISS_DET -DHEARTBEAT -DMOLD_MSG_IDS $(if $(debug),-DDEBUG)
 WAVE_FILE=wave.vcd
 VIEW=gtkwave
 WAVE_CONF=wave.conf

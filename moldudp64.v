@@ -8,11 +8,22 @@
 
 /* Module is a slave connected to an AXI steam interface */
 
+// make sure shared logic is defined
+`ifdef DEBUG
+`define _INC_MOLD_IDS
+`elsif MOLD_MSG_IDS
+`define _INC_MOLD_IDS
+`endif
+
 module moldudp64 #(
+
 	parameter AXI_DATA_W  = 64,
 	parameter AXI_KEEP_W  = 8,
 	parameter SID_W       = 80,
 	parameter SEQ_NUM_W   = 64,
+	`ifdef DEBUG
+	parameter DEBUG_ID_W  = SID_W + SEQ_NUM_W,
+	`endif	
 	parameter ML_W        = 16, // Mold length field width in bits
 	parameter EOS_MSG_CNT = {ML_W{1'b1}} // end-of-session msg cnt value
 )(
@@ -53,7 +64,11 @@ module moldudp64 #(
 	output [SID_W-1:0]      mold_msg_sid_o,
 	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,// Mold message
 	`endif
-
+	`ifdef DEBUG
+	// no input debug id as it is constructed out of the seq
+	// and sid numbers
+	output [DEBUG_ID_W-1:0] debug_id_o,
+	`endif
 	output                  mold_msg_v_o,
 	output                  mold_msg_start_o, // start of a new msg
 	output [AXI_KEEP_W-1:0] mold_msg_mask_o,
@@ -70,7 +85,7 @@ localparam DATA_DIF_W  = AXI_DATA_W - DFF_DATA_W; // 8
 reg   [SID_W-1:0]     sid_q;
 logic [SID_W-1:0]     sid_next;
 
-`ifdef MOLD_MSG_IDS
+`ifdef _INC_MOLD_IDS
 reg   [SEQ_NUM_W-1:0] seq_q;
 logic [SEQ_NUM_W-1:0] seq_next;
 logic [SEQ_NUM_W-1:0] seq_add;
@@ -82,7 +97,6 @@ logic                 seq_en;
 reg   [47:0]          seq_q;
 logic [47:0]          seq_next;
 `endif
-
 logic        init_sid_p0_v; 
 logic [15:0] init_sid_p0;
 logic        init_sid_p1_v;
@@ -221,12 +235,12 @@ header m_header(
 // sid
 always @(posedge clk) begin
 	if( init_sid_p0_v )
-		sid_q[7:0] <= init_sid_p0;
+		sid_q[15:0] <= init_sid_p0;
 	if( init_sid_p1_v ) 
-		sid_q[78:7] <= init_sid_p1;
+		sid_q[79:16] <= init_sid_p1;
 end
 // seq
-`ifdef MOLD_MSG_IDS
+`ifdef _INC_MOLD_IDS
 assign { seq_add_overflow, seq_add } = seq_q + {{SEQ_NUM_W-1{1'b0}}, 1'b1};
 assign seq_next[15:0]  = init_seq_num_p0_v ? init_seq_num_p0 : seq_add[15:0];
 assign seq_next[63:16] = init_seq_num_p1_v ? init_seq_num_p1 : seq_add[63:16];
@@ -502,6 +516,10 @@ assign mold_msg_mask_o    = msg_mask;
 `ifdef MOLD_MSG_IDS
 assign mold_msg_sid_o     = sid_q;
 assign mold_msg_seq_num_o = seq_q;
+`endif
+
+`ifdef DEBUG
+assign debug_id_o         = { sid_q , seq_q };
 `endif
 
 `ifdef FORMAL

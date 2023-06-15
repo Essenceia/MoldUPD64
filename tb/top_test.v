@@ -7,6 +7,10 @@ parameter SID_W = 10*LEN;// session id
 parameter SEQ_NUM_W = 8*LEN; // sequence number
 parameter MH_W  = 20*LEN;// header 
 
+`ifdef DEBUG
+parameter DEBUG_ID_W = SEQ_NUM_W + SID_W;
+`endif
+
 module moldudp64_tb;	
 reg clk = 0;
 reg nreset = 1'b0;	
@@ -24,6 +28,10 @@ logic                  mold_msg_v_o;
 logic                  mold_msg_start_o;
 logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
 logic [AXI_DATA_W-1:0] mold_msg_data_o;
+
+`ifdef DEBUG
+logic [DEBUG_ID_W-1:0] debug_id_o;
+`endif
 
 `ifdef MOLD_MSG_IDS
 logic [SID_W-1:0]      mold_msg_sid_o;
@@ -115,6 +123,9 @@ end
 always #5 clk = !clk;
 
 moldudp64 #(
+	`ifdef DEBUG
+	.DEBUG_ID_W(DEBUG_ID_W),
+	`endif
 	.AXI_DATA_W(AXI_DATA_W),
 	.AXI_KEEP_W(AXI_KEEP_W),
 	.SID_W(SID_W),
@@ -153,6 +164,10 @@ moldudp64 #(
 	.mold_msg_sid_o    (mold_msg_sid_o    ),
 	.mold_msg_seq_num_o(mold_msg_seq_num_o),
 	`endif
+
+	`ifdef DEBUG
+	.debug_id_o      (debug_id_o),
+	`endif
 	
 	.mold_msg_v_o    (mold_msg_v_o    ),
 	.mold_msg_start_o(mold_msg_start_o),
@@ -172,6 +187,9 @@ always @(posedge clk) begin
 			assert( ~$isunknown(mold_msg_seq_num_o));
 			assert( ~$isunknown(mold_msg_sid_o));
 			`endif
+			`ifdef DEBUG
+			assert( ~$isunknown(debug_id_o));
+			`endif
 			end
 	end
 end
@@ -185,8 +203,11 @@ for( i = 0; i < AXI_KEEP_W; i++) begin
 		if ( nreset ) begin
 			assert( ~$isunknown( masked_data ));
 			`ifdef DEBUG
-			$display("%t i %d masked data %h, mask %d, data %h",$time,i,
-				masked_data, mold_msg_mask_o[i], mold_msg_data_o[8*i+7:8*i]);
+			if ( $isunknown( masked_data )) begin
+				$display("%t i %d masked data %h, mask %d, data %h debug id %d",
+					$time,i,masked_data, mold_msg_mask_o[i],
+					 mold_msg_data_o[8*i+7:8*i],debug_id_o);
+			end
 			`endif
 		end
 	end
