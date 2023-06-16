@@ -67,7 +67,7 @@ module moldudp64 #(
 	`ifdef DEBUG_ID
 	// no input debug id as it is constructed out of the seq
 	// and sid numbers
-	output [DEBUG_ID_W-1:0] debug_id_o,
+	output [DEBUG_ID_W-1:0] mold_msg_debug_id_o,
 	`endif
 	output                  mold_msg_v_o,
 	output                  mold_msg_start_o, // start of a new msg
@@ -519,7 +519,7 @@ assign mold_msg_seq_num_o = seq_q;
 `endif
 
 `ifdef DEBUG_ID
-assign debug_id_o         = { sid_q , seq_q };
+assign mold_msg_debug_id_o         = { sid_q , seq_q };
 `endif
 
 `ifdef FORMAL

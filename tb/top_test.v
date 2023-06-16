@@ -30,7 +30,7 @@ logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
 logic [AXI_DATA_W-1:0] mold_msg_data_o;
 
 `ifdef DEBUG_ID
-logic [DEBUG_ID_W-1:0] debug_id_o;
+logic [DEBUG_ID_W-1:0] mold_msg_debug_id_o;
 `endif
 
 `ifdef MOLD_MSG_IDS
@@ -166,7 +166,7 @@ moldudp64 #(
 	`endif
 
 	`ifdef DEBUG_ID
-	.debug_id_o      (debug_id_o),
+	.mold_msg_debug_id_o(mold_msg_debug_id_o),
 	`endif
 	
 	.mold_msg_v_o    (mold_msg_v_o    ),
@@ -188,7 +188,7 @@ always @(posedge clk) begin
 			assert( ~$isunknown(mold_msg_sid_o));
 			`endif
 			`ifdef DEBUG_ID
-			assert( ~$isunknown(debug_id_o));
+			assert( ~$isunknown(mold_msg_debug_id_o));
 			`endif
 			end
 	end
