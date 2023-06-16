@@ -9,7 +9,7 @@
 /* Module is a slave connected to an AXI steam interface */
 
 // make sure shared logic is defined
-`ifdef DEBUG
+`ifdef DEBUG_ID
 `define _INC_MOLD_IDS
 `elsif MOLD_MSG_IDS
 `define _INC_MOLD_IDS
@@ -21,7 +21,7 @@ module moldudp64 #(
 	parameter AXI_KEEP_W  = 8,
 	parameter SID_W       = 80,
 	parameter SEQ_NUM_W   = 64,
-	`ifdef DEBUG
+	`ifdef DEBUG_ID
 	parameter DEBUG_ID_W  = SID_W + SEQ_NUM_W,
 	`endif	
 	parameter ML_W        = 16, // Mold length field width in bits
@@ -64,7 +64,7 @@ module moldudp64 #(
 	output [SID_W-1:0]      mold_msg_sid_o,
 	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,// Mold message
 	`endif
-	`ifdef DEBUG
+	`ifdef DEBUG_ID
 	// no input debug id as it is constructed out of the seq
 	// and sid numbers
 	output [DEBUG_ID_W-1:0] debug_id_o,
@@ -518,7 +518,7 @@ assign mold_msg_sid_o     = sid_q;
 assign mold_msg_seq_num_o = seq_q;
 `endif
 
-`ifdef DEBUG
+`ifdef DEBUG_ID
 assign debug_id_o         = { sid_q , seq_q };
 `endif
 

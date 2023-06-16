@@ -31,7 +31,7 @@ Run test :
 make run
 ```
 
-( Optional ) Run with `DEBUG` macro defined :
+( Optional ) Run with `DEBUG` and `DEBUG_ID` macro defined :
 ```
 make run debug=1
 ```
@@ -43,13 +43,13 @@ make clean
 
 ### Debug id
 
-When the `DEBUG` macro is defined the `moldudp64` module output an
+When the `DEBUG_ID` macro is defined the `moldudp64` module output an
 `debug_id_o` alongside each message. This signal is used to help 
 track each message individually for debug.
 
 This id is created by combining the session id and the sequence number.
 
-By default the `DEBUG` macro is not defined.
+By default the `DEBUG_ID` macro is not defined.
 
 ## UDP : AXI stream 
 
