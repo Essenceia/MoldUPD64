@@ -125,6 +125,8 @@ logic [AXI_KEEP_LW-1:0] msg_len_got_sat;// saturated version
 logic                   msg_len_zero;
 logic                   msg_end;
 logic                   msg_end_align;
+logic                   msg_len_split;
+
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_overlap;
 logic                   msg_start_lite_next;
@@ -325,11 +327,12 @@ end
 assign msg_len_zero  = ~|msg_len_q;
 assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
 assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|flop_shift; // msg end aligns with the end of the AXI payload
+assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
  
 // init msg
 endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_o(header_msg_len));
 assign init_msg_len_v = fsm_h2_msg_q 
-			          | (msg_v & msg_end & ~msg_end_align & ~cnt_end )
+			          | (msg_v & msg_end & ~msg_end_align & ~msg_len_split & ~cnt_end )
 					  | fsm_msg_len_split_q 
 					  | fsm_msg_len_align_q; 
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & header_msg_len // TODO : support 1st msg len=0
@@ -360,16 +363,17 @@ genvar j;
 generate 
 	//assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[15:8]; // big endian to little endian	
 	//assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[7:0];	
-	for(j=0; j<AXI_KEEP_W-1; j++) begin
-		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[8*j+7-1: 8*j];
-		assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[8*(j+1)+7-1:8*(j+1)];	
+	for(j=0; j<AXI_KEEP_W; j++) begin
+		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[8*j+7-1: 8*j]; // lsb
+		if ( j == 7 ) assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[7:0];//msb	
+		else assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[8*(j+1)+7-1:8*(j+1)];//msb	
 	end
 endgenerate
-assign len_shift = ( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q}};
+assign len_shift =( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q & ~fsm_msg_len_split_q}};
 always_comb begin
 	init_msg_len_p0 = {8{1'bX}};
 	init_msg_len_p1 = {8{1'bX}};
-	for( int unsigned i=0; i <= AXI_KEEP_W-1; i++) begin
+	for( int unsigned i=0; i < AXI_KEEP_W; i++) begin
 		if ( i == ( len_shift )) init_msg_len_p0 = init_msg_len_p0_arr[i];
 		if ( i == ( len_shift )) init_msg_len_p1 = init_msg_len_p1_arr[i];
 	end
@@ -389,6 +393,7 @@ assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
 					 | {ML_W{fsm_h2_msg_q}} & 'd2  // TODO : add support for first msg len=0 
 					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q // keep current flop len shift until the end of the message
 				     | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
+				     | {ML_W{fsm_msg_len_split_q}} & 'd7 
 				     | {ML_W{fsm_msg_len_align_q}} & 'd6; 
 assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
 				   | {ML_W{fsm_msg_q}} & flop_len_q
@@ -477,7 +482,7 @@ assign fsm_msg_next = fsm_h2_msg_q
 
 assign fsm_msg_overlap_next   = 1'b0;  
 // msg len split over 2 AXI payloads
-assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & (len_shift == 'd7);
+assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
 // msg len missing : present in start of the next packet
 assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_end_align;
 
