@@ -116,6 +116,8 @@ reg   [ML_W-1:0] msg_len_q;
 logic [ML_W-1:0] msg_len_next;
 logic [ML_W-1:0] header_msg_len;
 logic [ML_W-1:0] init_msg_len;
+logic [ML_W-1:0] init_msg_len_split;
+logic            init_msg_len_split_overflow;
 logic            init_msg_len_v;
 
 logic [AXI_KEEP_LW-1:0] udp_axis_data_len; 
@@ -318,9 +320,10 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 	.cnt_o(udp_axis_data_len)
 );
 
-assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_split_q;
+assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_align_q; // | fsm_msg_len_split_q;
 
-assign msg_start_lite_next = fsm_h2_msg_q | ( msg_v & msg_end ) | fsm_msg_len_align_q;
+assign msg_start_lite_next = fsm_h2_msg_q | ( msg_v & msg_end ) | fsm_msg_len_align_q | fsm_msg_len_split_q;
+
 always @(posedge clk) begin
 	msg_start_lite_q <= msg_start_lite_next;
 end
@@ -328,7 +331,8 @@ end
 // recieved ( ! not sent ) 
 assign msg_len_zero  = ~|msg_len_q;
 assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
-assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|axis_shift; // msg end aligns with the end of the AXI payload
+assign msg_end_align = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] == flop_len_q ) ; // msg end aligns with the end of the AXI payload
+// todo : assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ( axis_shift == ; // msg end aligns with the end of the AXI payload
 assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
  
 // init msg
@@ -372,7 +376,8 @@ generate
 		else assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[8*(j+1)+7-1:8*(j+1)];//msb	
 	end
 endgenerate
-assign len_shift =( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q & ~fsm_msg_len_split_q}};
+//assign len_shift =( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q & ~fsm_msg_len_split_q}};
+assign len_shift = fsm_msg_len_split_q ? 'd7 : ( msg_len_q[AXI_KEEP_LW-1:0] - flop_len_q[AXI_KEEP_LW-1:0] );
 always_comb begin
 	init_msg_len_p0 = {8{1'bX}};
 	init_msg_len_p1 = {8{1'bX}};
@@ -411,8 +416,8 @@ assign axis_shift = flop_shift_lite
 
 assign flop_shift = flop_shift_lite
 				  | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q
-				  | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift); // end of the message, loading new shift offset
-  
+				  | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift)// end of the message, loading new shift offset
+  				  | {ML_W{fsm_msg_len_split_q }} & 'd7;
 //assign axis_flop_tdata_shift = flop_len_next; 
 
 //assign axis_msg_tdata_shift = flop_len_next;
@@ -423,7 +428,7 @@ logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W:0];
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = udp_axis_tdata_q[AXI_DATA_W-1:0]; 
-	for( j = 1; j <= DFF_DATA_LW; j++) begin
+	for( j = 1; j <= 7; j++) begin
 		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, udp_axis_tdata_q[63:(64-(8*j))] }; 
 		assign axis_msg_tdata_shifted_arr[j]  = { udp_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };
 	end
@@ -433,7 +438,7 @@ always_comb begin
 	// default
 	flop_data_next = { AXI_DATA_W{1'bX}}; 
 	axis_msg_tdata_shifted = { AXI_DATA_W{1'bX}};
-	for( int unsigned i=0; i <= DFF_DATA_LW; i++) begin
+	for( int unsigned i=0; i <= 7; i++) begin
 	 	if (i == flop_shift) flop_data_next = axis_flop_tdata_shifted_arr[i];
 	 	if (i == axis_shift) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
 	end
@@ -497,7 +502,7 @@ assign fsm_msg_overlap_next   = 1'b0;
 // msg len split over 2 AXI payloads
 assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
 // msg len missing : present in start of the next packet
-assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_end_align;
+assign fsm_msg_len_align_next = fsm_msg_q & ~cnt_end_next & msg_end_align;
 
 always @(posedge clk)
 begin
@@ -569,7 +574,9 @@ always @(posedge clk) begin
 		a_axi_tkeep_thermo : assume( ~udp_axis_tvalid_i | ( udp_axis_tvalid_i & $onehot0( udp_axis_tkeep_i - AXI_KEEP_W'd1 ))); 
 		// tkeep is only not only 1s on the last payload
 		a_axi_tkeep_n1s_only_tlast : assume ( ~udp_axis_tvalid_i | ( udp_axis_tvalid_i & ~udp_axis_tlast_i & &udp_axis_tkeep_i ));
-	
+		
+		// legth field should never overflow 
+			
 		// fsm
 		sva_fsm_onehot : assert( $onehot( fsm_f )); 
 		
