@@ -130,7 +130,6 @@ logic                   msg_end_align;
 logic                   msg_len_split;
 
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
-logic                   msg_overlap;
 logic                   msg_start_lite_next;
 reg                     msg_start_lite_q;
 
@@ -180,11 +179,9 @@ logic fsm_h0_next;
 logic fsm_h1_next;
 logic fsm_h2_msg_next;
 reg   fsm_msg_q;
-reg   fsm_msg_overlap_q;
 reg   fsm_msg_len_split_q;
 reg   fsm_msg_len_align_q;
 logic fsm_msg_next;
-logic fsm_msg_overlap_next;
 logic fsm_msg_len_split_next;
 logic fsm_msg_len_align_next;
 
@@ -320,7 +317,7 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 	.cnt_o(udp_axis_data_len)
 );
 
-assign msg_v = fsm_msg_q | fsm_msg_overlap_q | fsm_msg_len_align_q; // | fsm_msg_len_split_q;
+assign msg_v = fsm_msg_q | fsm_msg_len_align_q; // | fsm_msg_len_split_q;
 
 assign msg_start_lite_next = fsm_h2_msg_q | ( msg_v & msg_end ) | fsm_msg_len_align_q | fsm_msg_len_split_q;
 
@@ -498,7 +495,6 @@ assign fsm_msg_next = fsm_h2_msg_q
 					| fsm_msg_len_split_q
 					| fsm_msg_len_align_q;
 
-assign fsm_msg_overlap_next   = 1'b0;  
 // msg len split over 2 AXI payloads
 assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
 // msg len missing : present in start of the next packet
@@ -512,7 +508,6 @@ begin
 		fsm_h1_q         <= 1'b0;
 		fsm_h2_msg_q     <= 1'b0;
 		fsm_msg_q         <= 1'b0;
-		fsm_msg_overlap_q <= 1'b0;
 		fsm_msg_len_split_q <= 1'b0;
 		fsm_msg_len_align_q <= 1'b0;
 		end else begin
@@ -521,7 +516,6 @@ begin
 		fsm_h1_q         <= fsm_h1_next;    
 		fsm_h2_msg_q     <= fsm_h2_msg_next;   
 		fsm_msg_q         <= fsm_msg_next;
-		fsm_msg_overlap_q   <= fsm_msg_overlap_next;
 		fsm_msg_len_split_q <= fsm_msg_len_split_next;
 		fsm_msg_len_align_q <= fsm_msg_len_align_next;
 	end
@@ -548,11 +542,11 @@ assign mold_msg_debug_id_o         = { sid_q , seq_q };
 
 `ifdef FORMAL
 
-logic [0:7] fsm_f;
+logic [0:6] fsm_f;
 assign fsm_f = {
 	fsm_invalid_q, 
 	fsm_h0_q, fsm_h1_q, fsm_h2_msg_q,
-	fsm_msg_q, fsm_msg_overlap_q, fsm_msg_len_split_q, fsm_msg_len_align_q};
+	fsm_msg_q, fsm_msg_len_split_q, fsm_msg_len_align_q};
 
 initial begin
 	// assume
