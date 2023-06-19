@@ -145,7 +145,9 @@ logic [AXI_DATA_W-1:0] msg_data;
 logic [DFF_DATA_W-1:0] flop_data_next;
 logic [DFF_DATA_W-1:0] flop_data_q;
 
+logic [AXI_KEEP_LW-1:0] flop_shift_lite;
 logic [AXI_KEEP_LW-1:0] flop_shift;
+logic [AXI_KEEP_LW-1:0] axis_shift;
 logic [AXI_KEEP_LW-1:0] len_shift;
 logic [AXI_KEEP_LW-1:0] flop_len_next;
 logic [AXI_KEEP_LW-1:0] flop_len_q;
@@ -326,7 +328,7 @@ end
 // recieved ( ! not sent ) 
 assign msg_len_zero  = ~|msg_len_q;
 assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
-assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|flop_shift; // msg end aligns with the end of the AXI payload
+assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ~|axis_shift; // msg end aligns with the end of the AXI payload
 assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
  
 // init msg
@@ -334,7 +336,8 @@ endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_
 assign init_msg_len_v = fsm_h2_msg_q 
 			          | (msg_v & msg_end & ~msg_end_align & ~msg_len_split & ~cnt_end )
 					  | fsm_msg_len_split_q 
-					  | fsm_msg_len_align_q; 
+					  | fsm_msg_len_align_q;
+ 
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & header_msg_len // TODO : support 1st msg len=0
 					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1_q ,init_msg_len_p0} ;// len split over 2 axi payloads
@@ -395,11 +398,21 @@ assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
 				     | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
 				     | {ML_W{fsm_msg_len_split_q}} & 'd7 
 				     | {ML_W{fsm_msg_len_align_q}} & 'd6; 
-assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
-				   | {ML_W{fsm_msg_q}} & flop_len_q
-				   //| {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
-				   | {ML_W{fsm_msg_len_align_q}} & 'd6; 
+// assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
+// 				   | {ML_W{fsm_msg_q}} & flop_len_q
+// 				  // | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
+// 				   | {ML_W{fsm_msg_len_align_q}} & 'd6;
  
+assign flop_shift_lite = {ML_W{fsm_h2_msg_q}} & 'd2 
+				   	   | {ML_W{fsm_msg_len_align_q}} & 'd6;
+
+assign axis_shift = flop_shift_lite
+				  | {ML_W{fsm_msg_q}} & flop_len_q;
+
+assign flop_shift = flop_shift_lite
+				  | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q
+				  | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift); // end of the message, loading new shift offset
+  
 //assign axis_flop_tdata_shift = flop_len_next; 
 
 //assign axis_msg_tdata_shift = flop_len_next;
@@ -422,7 +435,7 @@ always_comb begin
 	axis_msg_tdata_shifted = { AXI_DATA_W{1'bX}};
 	for( int unsigned i=0; i <= DFF_DATA_LW; i++) begin
 	 	if (i == flop_shift) flop_data_next = axis_flop_tdata_shifted_arr[i];
-	 	if (i == flop_shift) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
+	 	if (i == axis_shift) axis_msg_tdata_shifted  = axis_msg_tdata_shifted_arr[i]; 
 	end
 end
 
