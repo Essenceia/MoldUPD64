@@ -358,15 +358,14 @@ logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
 genvar j;
 generate 
-	assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[15:8]; // big endian to little endian	
-	assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[7:0];	
-	for(j=1; j<AXI_KEEP_W; j++) begin
-		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[63-8*(j-1): 64-8*j];
-		if ( j == 1 ) assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[7:0];
-		else assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[63-8*(j-2):64-8*(j-1)];	
+	//assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[15:8]; // big endian to little endian	
+	//assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[7:0];	
+	for(j=0; j<AXI_KEEP_W-1; j++) begin
+		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[8*j+7-1: 8*j];
+		assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[8*(j+1)+7-1:8*(j+1)];	
 	end
 endgenerate
-assign len_shift = flop_shift & {ML_W{~fsm_msg_len_align_q}};
+assign len_shift = ( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q}};
 always_comb begin
 	init_msg_len_p0 = {8{1'bX}};
 	init_msg_len_p1 = {8{1'bX}};
@@ -389,9 +388,11 @@ end
 assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
 					 | {ML_W{fsm_h2_msg_q}} & 'd2  // TODO : add support for first msg len=0 
 					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q // keep current flop len shift until the end of the message
+				     | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
 				     | {ML_W{fsm_msg_len_align_q}} & 'd6; 
 assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
 				   | {ML_W{fsm_msg_q}} & flop_len_q
+				   //| {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
 				   | {ML_W{fsm_msg_len_align_q}} & 'd6; 
  
 //assign axis_flop_tdata_shift = flop_len_next; 
