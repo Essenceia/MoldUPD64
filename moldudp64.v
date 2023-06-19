@@ -477,7 +477,7 @@ assign fsm_msg_next = fsm_h2_msg_q
 
 assign fsm_msg_overlap_next   = 1'b0;  
 // msg len split over 2 AXI payloads
-assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & (flop_shift == 'd1);
+assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & (len_shift == 'd7);
 // msg len missing : present in start of the next packet
 assign fsm_msg_len_align_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_end_align;
 
