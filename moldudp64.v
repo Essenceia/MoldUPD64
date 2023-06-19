@@ -109,6 +109,7 @@ logic [47:0] init_seq_num_p1;
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
 logic [ML_W-1:0] msg_cnt_next;
+logic [ML_W-1:0] msg_cnt_dec;
 logic            init_msg_cnt_v;
 logic [ML_W-1:0] init_msg_cnt;
 logic            init_eos;// end of session
@@ -128,6 +129,8 @@ logic                   msg_len_zero;
 logic                   msg_end;
 logic                   msg_end_align;
 logic                   msg_len_split;
+
+logic                   msg_len_in_flop_next;
 
 logic [AXI_KEEP_W-1:0]  msg_end_mask;                  
 logic                   msg_start_lite_next;
@@ -181,11 +184,14 @@ logic fsm_h2_msg_next;
 reg   fsm_msg_q;
 reg   fsm_msg_len_split_q;
 reg   fsm_msg_len_align_q;
+reg   fsm_msg_len_flop_q;
 logic fsm_msg_next;
 logic fsm_msg_len_split_next;
 logic fsm_msg_len_align_next;
+logic fsm_msg_len_flop_next;
 
 // AXI 
+logic                  udp_axis_en;
 reg [AXI_DATA_W-1:0]   udp_axis_tdata_q;
 reg [AXI_KEEP_W-1:0]   udp_axis_tkeep_q;
 reg                    udp_axis_tvalid_q;
@@ -197,6 +203,8 @@ logic                  udp_axis_tvalid_next;
 logic                  udp_axis_tlast_next;
 logic                  udp_axis_tuser_next;
 
+logic [AXI_DATA_W-1:0]  len_data_src;
+
 // axi payload buffering ( for timing, might replace with clk domain crossing )
 assign udp_axis_tdata_next  = udp_axis_tdata_i;  
 assign udp_axis_tkeep_next  = udp_axis_tkeep_i;
@@ -204,11 +212,12 @@ assign udp_axis_tvalid_next = udp_axis_tvalid_i;
 assign udp_axis_tlast_next  = udp_axis_tlast_i;
 assign udp_axis_tuser_next  = udp_axis_tuser_i;
 
+assign udp_axis_en = udp_axis_tvalid_i |( udp_axis_tvalid_q & udp_axis_tlast_q);
 always @(posedge clk) 
 begin
 	if ( ~nreset ) begin
 		udp_axis_tvalid_q  <= 1'b0;
-	end else begin
+	end else if(udp_axis_en)begin
 		udp_axis_tdata_q   <= udp_axis_tdata_next; 	
 		udp_axis_tkeep_q   <= udp_axis_tkeep_next;
 		udp_axis_tvalid_q  <= udp_axis_tvalid_next;
@@ -317,9 +326,13 @@ cnt_ones_thermo #(.D_W(AXI_KEEP_W),.D_LW(AXI_KEEP_LW))
 	.cnt_o(udp_axis_data_len)
 );
 
-assign msg_v = fsm_msg_q | fsm_msg_len_align_q; // | fsm_msg_len_split_q;
+assign msg_v = fsm_msg_q | fsm_msg_len_align_q | fsm_msg_len_flop_q; // | fsm_msg_len_split_q;
 
-assign msg_start_lite_next = fsm_h2_msg_q | ( msg_v & msg_end ) | fsm_msg_len_align_q | fsm_msg_len_split_q;
+assign msg_start_lite_next = fsm_h2_msg_q 
+						   | ( msg_v & msg_end )
+						   | fsm_msg_len_align_q 
+						   | fsm_msg_len_split_q
+						   | fsm_msg_len_flop_q;
 
 always @(posedge clk) begin
 	msg_start_lite_q <= msg_start_lite_next;
@@ -331,16 +344,18 @@ assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW
 assign msg_end_align = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] == flop_len_q ) ; // msg end aligns with the end of the AXI payload
 // todo : assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ( axis_shift == ; // msg end aligns with the end of the AXI payload
 assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
- 
+
+assign msg_len_in_flop_next = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] < flop_len_q );  
 // init msg
 endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_o(header_msg_len));
 assign init_msg_len_v = fsm_h2_msg_q 
 			          | (msg_v & msg_end & ~msg_end_align & ~msg_len_split & ~cnt_end )
 					  | fsm_msg_len_split_q 
-					  | fsm_msg_len_align_q;
+					  | fsm_msg_len_align_q
+					  | fsm_msg_len_flop_q; 
  
 assign init_msg_len   = { ML_W{ fsm_h2_msg_q }} & header_msg_len // TODO : support 1st msg len=0
-					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q }} &  { init_msg_len_p1, init_msg_len_p0 }
+					  | { ML_W{ fsm_msg_q | fsm_msg_len_align_q | fsm_msg_len_flop_q}} &  { init_msg_len_p1, init_msg_len_p0 }
 					  | { ML_W{ fsm_msg_len_split_q }} & { init_msg_len_p1_q ,init_msg_len_p0} ;// len split over 2 axi payloads
 
 assign msg_len_got     = ( {AXI_KEEP_LW{udp_axis_tvalid_q}} & udp_axis_data_len) + flop_len_q;
@@ -365,16 +380,20 @@ logic [7:0] init_msg_len_p0_arr[AXI_KEEP_W-1:0];
 logic [7:0] init_msg_len_p1_arr[AXI_KEEP_W-1:0];
 genvar j;
 generate 
+	assign len_data_src = fsm_msg_len_flop_q ? { {AXI_DATA_W-DFF_DATA_W{1'bx}}, flop_data_q } 
+					    : udp_axis_tdata_q;
 	//assign init_msg_len_p0_arr[0] = udp_axis_tdata_q[15:8]; // big endian to little endian	
 	//assign init_msg_len_p1_arr[0] = udp_axis_tdata_q[7:0];	
 	for(j=0; j<AXI_KEEP_W; j++) begin
-		assign init_msg_len_p1_arr[j] = udp_axis_tdata_q[8*j+7-1: 8*j]; // lsb
-		if ( j == 7 ) assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[7:0];//msb	
-		else assign init_msg_len_p0_arr[j] = udp_axis_tdata_q[8*(j+1)+7-1:8*(j+1)];//msb	
+		assign init_msg_len_p1_arr[j] = len_data_src[8*j+7-1: 8*j]; // lsb
+		if ( j == 7 ) assign init_msg_len_p0_arr[j] = len_data_src[7:0];//msb	
+		else assign init_msg_len_p0_arr[j] = len_data_src[8*(j+1)+7-1:8*(j+1)];//msb	
 	end
 endgenerate
 //assign len_shift =( msg_len_q[ML_W-1:0] - flop_len_q ) & {ML_W{~fsm_msg_len_align_q & ~fsm_msg_len_split_q}};
-assign len_shift = fsm_msg_len_split_q ? 'd7 : ( msg_len_q[AXI_KEEP_LW-1:0] - flop_len_q[AXI_KEEP_LW-1:0] );
+assign len_shift = {AXI_KEEP_LW{fsm_msg_len_split_q}} & 'd7 
+				 | {AXI_KEEP_LW{fsm_msg_len_flop_q }} & msg_len_q[AXI_KEEP_LW-1:0]
+				 | {AXI_KEEP_LW{fsm_msg_q | fsm_msg_len_align_q}} & ( msg_len_q[AXI_KEEP_LW-1:0] - flop_len_q[AXI_KEEP_LW-1:0] );
 always_comb begin
 	init_msg_len_p0 = {8{1'bX}};
 	init_msg_len_p1 = {8{1'bX}};
@@ -466,8 +485,9 @@ endgenerate
 
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
+assign msg_cnt_dec  = msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 };  
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
-					  (msg_end & ~cnt_end) ? msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 } : msg_cnt_q;
+					  (msg_end & ~cnt_end) ? msg_cnt_dec : msg_cnt_q;
 assign cnt_end_next = ~|msg_cnt_next;
 assign cnt_end = ~|msg_cnt_q;
 
@@ -478,8 +498,8 @@ begin
 end
 // fsm
 
-assign fsm_invalid_next = fsm_invalid_q & ~udp_axis_tvalid_i // first payload received
-						| fsm_msg_q & ( msg_end & cnt_end_next );
+assign fsm_invalid_next =  fsm_invalid_q & ~udp_axis_tvalid_i // first payload received
+						| ( fsm_msg_q | fsm_msg_len_align_q ) & ( msg_end & cnt_end_next );
 // header 
 // hX  : header is received over multiple cycles 
 // msg : during last cycle part of the packed is the begining of the message
@@ -491,14 +511,19 @@ assign fsm_h2_msg_next = fsm_h1_q;
 // overlap : part of the next axi payload is of a different modludp64 message
 //           it will be routed to the free moldudp64 module
 assign fsm_msg_next = fsm_h2_msg_q 
-					| (fsm_msg_q & ~(msg_end & cnt_end_next) & ~( fsm_msg_len_split_next | fsm_msg_len_align_next ))
+					| (fsm_msg_q & ~(msg_end & cnt_end_next) 
+						& ~( fsm_msg_len_split_next | fsm_msg_len_align_next| msg_len_in_flop_next  ))
 					| fsm_msg_len_split_q
-					| fsm_msg_len_align_q;
+					| fsm_msg_len_align_q
+				    | fsm_msg_len_flop_q;
 
 // msg len split over 2 AXI payloads
 assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
 // msg len missing : present in start of the next packet
 assign fsm_msg_len_align_next = fsm_msg_q & ~cnt_end_next & msg_end_align;
+//assign fsm_msg_len_align_next = fsm_msg_q & ~|msg_cnt_dec & msg_end_align;
+// msg len is stored in flop
+assign fsm_msg_len_flop_next = fsm_msg_q & ~cnt_end_next & msg_len_in_flop_next;  
 
 always @(posedge clk)
 begin
@@ -510,6 +535,7 @@ begin
 		fsm_msg_q         <= 1'b0;
 		fsm_msg_len_split_q <= 1'b0;
 		fsm_msg_len_align_q <= 1'b0;
+		fsm_msg_len_flop_q  <= 1'b0;
 		end else begin
 		fsm_invalid_q    <= fsm_invalid_next; 
 		fsm_h0_q         <= fsm_h0_next;     
@@ -518,12 +544,13 @@ begin
 		fsm_msg_q         <= fsm_msg_next;
 		fsm_msg_len_split_q <= fsm_msg_len_split_next;
 		fsm_msg_len_align_q <= fsm_msg_len_align_next;
+		fsm_msg_len_flop_q  <= fsm_msg_len_flop_next;
 	end
 end
 
 
 // output
-assign udp_axis_tready_o = 1'b1; // we are always ready to accept a new packet 
+assign udp_axis_tready_o = ~fsm_msg_len_flop_q; // backpresure 
 
 assign mold_msg_v_o       = msg_v; 
 assign mold_msg_data_o    = msg_data; 
@@ -542,11 +569,12 @@ assign mold_msg_debug_id_o         = { sid_q , seq_q };
 
 `ifdef FORMAL
 
-logic [0:6] fsm_f;
+logic [0:7] fsm_f;
 assign fsm_f = {
 	fsm_invalid_q, 
 	fsm_h0_q, fsm_h1_q, fsm_h2_msg_q,
-	fsm_msg_q, fsm_msg_len_split_q, fsm_msg_len_align_q};
+	fsm_msg_q,
+	fsm_msg_len_split_q, fsm_msg_len_align_q, fsm_msg_len_flop_q};
 
 initial begin
 	// assume
@@ -569,8 +597,9 @@ always @(posedge clk) begin
 		// tkeep is only not only 1s on the last payload
 		a_axi_tkeep_n1s_only_tlast : assume ( ~udp_axis_tvalid_i | ( udp_axis_tvalid_i & ~udp_axis_tlast_i & &udp_axis_tkeep_i ));
 		
-		// legth field should never overflow 
-			
+		// backpresure should only last 1 cycle 
+		sva_backpresure_max_1_cycle : assert ( udp_axis_tready_o | ( $past(udp_axis_tready_o, 1 ) & ~udp_axis_tready_o ));	
+		
 		// fsm
 		sva_fsm_onehot : assert( $onehot( fsm_f )); 
 		
