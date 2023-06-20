@@ -154,7 +154,16 @@ logic [AXI_KEEP_LW-1:0] flop_shift;
 logic [AXI_KEEP_LW-1:0] axis_shift;
 logic [AXI_KEEP_LW-1:0] len_shift;
 logic [AXI_KEEP_LW-1:0] flop_len_next;
-logic [AXI_KEEP_LW-1:0] flop_len_q;
+reg   [AXI_KEEP_LW-1:0] flop_len_q;
+
+// part of the next payload is stored in flop
+logic                   flop_scr_flop_v;
+logic [AXI_KEEP_LW-1:0] flop_shift_scr_flop;
+logic [AXI_KEEP_LW-1:0] flop_scr_flop_len_next;
+
+
+logic [AXI_KEEP_LW-1:0] msg_len_lite_inc_2;
+logic                   msg_len_lite_inc_2_overflow;
 
 logic [AXI_KEEP_W-1:0] axis_msg_mask;
 logic [AXI_KEEP_W-1:0] flop_msg_mask;
@@ -204,6 +213,7 @@ logic                  udp_axis_tlast_next;
 logic                  udp_axis_tuser_next;
 
 logic [AXI_DATA_W-1:0]  len_data_src;
+logic [AXI_DATA_W-1:0]  flop_data_src;
 
 // axi payload buffering ( for timing, might replace with clk domain crossing )
 assign udp_axis_tdata_next  = udp_axis_tdata_i;  
@@ -346,6 +356,7 @@ assign msg_end_align = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_
 assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
 
 assign msg_len_in_flop_next = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] < flop_len_q );  
+
 // init msg
 endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_o(header_msg_len));
 assign init_msg_len_v = fsm_h2_msg_q 
@@ -411,14 +422,21 @@ end
 
 	
 // Message data buffering 
-// When possible we want to gather message bits into 64 bits continus chunks
+assign { msg_len_lite_inc_2_overflow, msg_len_lite_inc_2 } = msg_len_q[AXI_KEEP_LW-1:0] + 'd2;
 
+assign flop_scr_flop_v        = flop_len_q > msg_len_lite_inc_2; 
+assign flop_shift_scr_flop    = flop_scr_flop_v ? 'd7 - msg_len_lite_inc_2 : 'd0;
+assign flop_scr_flop_len_next = flop_scr_flop_v ? ( flop_len_q - msg_len_lite_inc_2 ) : 'd0; 
+
+// When possible we want to gather message bits into 64 bits continus chunks
 assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
 					 | {ML_W{fsm_h2_msg_q}} & 'd2  // TODO : add support for first msg len=0 
 					 | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q // keep current flop len shift until the end of the message
 				     | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
 				     | {ML_W{fsm_msg_len_split_q}} & 'd7 
-				     | {ML_W{fsm_msg_len_align_q}} & 'd6; 
+				     | {ML_W{fsm_msg_len_align_q}} & 'd6
+					 | {ML_W{fsm_msg_len_flop_q }} & flop_scr_flop_len_next;
+ 
 // assign flop_shift  = {ML_W{fsm_h2_msg_q}} & 'd2 
 // 				   | {ML_W{fsm_msg_q}} & flop_len_q
 // 				  // | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift) // end of the message, loading new shift offset
@@ -433,19 +451,24 @@ assign axis_shift = flop_shift_lite
 assign flop_shift = flop_shift_lite
 				  | {ML_W{fsm_msg_q & ~msg_end }} & flop_len_q
 				  | {ML_W{fsm_msg_q & msg_end }} & ( 'd6 - len_shift)// end of the message, loading new shift offset
-  				  | {ML_W{fsm_msg_len_split_q }} & 'd7;
+  				  | {ML_W{fsm_msg_len_split_q }} & 'd7
+				  | {ML_W{fsm_msg_len_flop_q  }} & flop_shift_scr_flop; 
+
 //assign axis_flop_tdata_shift = flop_len_next; 
 
 //assign axis_msg_tdata_shift = flop_len_next;
 
 // TODO : move declaration to top ?
+assign flop_data_src = fsm_msg_len_flop_q ? {flop_data_q ,{AXI_DATA_W-DFF_DATA_W{1'bx}} } 
+					 : udp_axis_tdata_q;
+
 logic [AXI_DATA_W-1:0] axis_flop_tdata_shifted_arr[DFF_DATA_W:0];
 logic [AXI_DATA_W-1:0] axis_msg_tdata_shifted_arr[DFF_DATA_W:0];
 generate
 	assign axis_flop_tdata_shifted_arr[0] = {AXI_DATA_W{1'bX}}; 
 	assign axis_msg_tdata_shifted_arr[0]  = udp_axis_tdata_q[AXI_DATA_W-1:0]; 
 	for( j = 1; j <= 7; j++) begin
-		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, udp_axis_tdata_q[63:(64-(8*j))] }; 
+		assign axis_flop_tdata_shifted_arr[j] =	{ { 64-(8*j) {1'b0} }, flop_data_src[63:(64-(8*j))] }; 
 		assign axis_msg_tdata_shifted_arr[j]  = { udp_axis_tdata_q[(63-(8*j)):0], {8*j{1'b0}} };
 	end
 endgenerate
@@ -599,7 +622,10 @@ always @(posedge clk) begin
 		
 		// backpresure should only last 1 cycle 
 		sva_backpresure_max_1_cycle : assert ( udp_axis_tready_o | ( $past(udp_axis_tready_o, 1 ) & ~udp_axis_tready_o ));	
-		
+	
+		// msg length lite incremented by 2 should never overlow when used
+		sva_msg_len_lite_inc_2_overflow : assert( ~fsm_msg_len_flop_q | ( fsm_msg_len_flop_q & ~msg_len_lite_inc_2_overflow ));
+	
 		// fsm
 		sva_fsm_onehot : assert( $onehot( fsm_f )); 
 		
