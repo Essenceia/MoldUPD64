@@ -520,7 +520,7 @@ assign fsm_msg_next = fsm_h2_msg_q
 // msg len split over 2 AXI payloads
 assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
 // msg len missing : present in start of the next packet
-assign fsm_msg_len_align_next = fsm_msg_q & ~cnt_end_next & msg_end_align;
+assign fsm_msg_len_align_next = fsm_msg_q & ~udp_axis_tlast_q & msg_end_align;
 //assign fsm_msg_len_align_next = fsm_msg_q & ~|msg_cnt_dec & msg_end_align;
 // msg len is stored in flop
 assign fsm_msg_len_flop_next = fsm_msg_q & ~cnt_end_next & msg_len_in_flop_next;  
