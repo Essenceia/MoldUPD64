@@ -109,6 +109,7 @@ logic [47:0] init_seq_num_p1;
 // metadata
 reg   [ML_W-1:0] msg_cnt_q;
 logic [ML_W-1:0] msg_cnt_next;
+logic            msg_cnt_dec_v;
 logic [ML_W-1:0] msg_cnt_dec;
 logic            init_msg_cnt_v;
 logic [ML_W-1:0] init_msg_cnt;
@@ -127,8 +128,10 @@ logic [ML_W:0]          msg_len_got;
 logic [AXI_KEEP_LW-1:0] msg_len_got_sat;// saturated version
 logic                   msg_len_zero;
 logic                   msg_end;
+logic                   msg_end_next;
 logic                   msg_end_align;
 logic                   msg_len_split;
+logic                   msg_len_split_flop;
 
 logic                   msg_len_in_flop_next;
 
@@ -160,7 +163,6 @@ reg   [AXI_KEEP_LW-1:0] flop_len_q;
 logic                   flop_scr_flop_v;
 logic [AXI_KEEP_LW-1:0] flop_shift_scr_flop;
 logic [AXI_KEEP_LW-1:0] flop_scr_flop_len_next;
-
 
 logic [AXI_KEEP_LW-1:0] msg_len_lite_inc_2;
 logic                   msg_len_lite_inc_2_overflow;
@@ -194,10 +196,12 @@ reg   fsm_msg_q;
 reg   fsm_msg_len_split_q;
 reg   fsm_msg_len_align_q;
 reg   fsm_msg_len_flop_q;
+reg   fsm_msg_len_flop_split_q;
 logic fsm_msg_next;
 logic fsm_msg_len_split_next;
 logic fsm_msg_len_align_next;
 logic fsm_msg_len_flop_next;
+logic fsm_msg_len_flop_split_next;
 
 // AXI 
 logic                  udp_axis_en;
@@ -350,12 +354,17 @@ end
 // decrement the number of bytes of the current message that have been
 // recieved ( ! not sent ) 
 assign msg_len_zero  = ~|msg_len_q;
-assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8));
+assign msg_end       = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_q[AXI_KEEP_LW-1:0] < (AXI_DATA_W/8));
+assign msg_end_next  = ~|msg_len_dec[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] <= (AXI_DATA_W/8)) & ~msg_end;
 assign msg_end_align = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] == flop_len_q ) ; // msg end aligns with the end of the AXI payload
 // todo : assign msg_end_align = ~|msg_len_q[AXI_MSG_L-1:0] & ( axis_shift == ; // msg end aligns with the end of the AXI payload
-assign msg_len_split = (len_shift == 'd7); // msg length field will be spread over 2 payloads
 
-assign msg_len_in_flop_next = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] < flop_len_q );  
+// msg length field will be spread over 2 payloads
+assign msg_len_split      = (len_shift == 'd7);
+assign msg_len_split_flop = ( flop_len_q - msg_len_q[AXI_KEEP_LW-1:0] ) == 'd1;
+
+//assign msg_len_in_flop_next = ~|msg_len_q[ML_W-1:AXI_KEEP_LW] & ( msg_len_dec[AXI_KEEP_LW-1:0] < flop_len_q[AXI_KEEP_LW-1:0] );  
+assign msg_len_in_flop_next = msg_end_next & ( msg_len_dec[AXI_KEEP_LW-1:0] < flop_len_q[AXI_KEEP_LW-1:0] );  
 
 // init msg
 endian_flip #(.B(2)) m_fe_udp_msg_len( .d_i(udp_axis_tdata_q[32+ML_W-1:32]), .d_o(header_msg_len));
@@ -427,6 +436,7 @@ assign { msg_len_lite_inc_2_overflow, msg_len_lite_inc_2 } = msg_len_q[AXI_KEEP_
 assign flop_scr_flop_v        = flop_len_q > msg_len_lite_inc_2; 
 assign flop_shift_scr_flop    = flop_scr_flop_v ? 'd7 - msg_len_lite_inc_2 : 'd0;
 assign flop_scr_flop_len_next = flop_scr_flop_v ? ( flop_len_q - msg_len_lite_inc_2 ) : 'd0; 
+
 
 // When possible we want to gather message bits into 64 bits continus chunks
 assign flop_len_next = {ML_W{fsm_h1_q}} & {ML_W{1'b0}} // reset flop len to 0
@@ -508,9 +518,13 @@ endgenerate
 
 // decrement the number of messages we are still expected to see if we have
 // reaced the end of the current message
-assign msg_cnt_dec  = msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 };  
+assign msg_cnt_dec   = msg_cnt_q - { {ML_W-1{1'b0}}, 1'b1 };
+// when half of the next length is in flop length's update will be delayed
+// by 1 cycle, we should not consider this a message end 
+assign msg_cnt_dec_v = msg_end & ~cnt_end & ~(fsm_msg_len_flop_q & msg_len_split_flop);
+ 
 assign msg_cnt_next = init_msg_cnt_v ? init_msg_cnt :
-					  (msg_end & ~cnt_end) ? msg_cnt_dec : msg_cnt_q;
+					  msg_cnt_dec_v  ? msg_cnt_dec : msg_cnt_q;
 assign cnt_end_next = ~|msg_cnt_next;
 assign cnt_end = ~|msg_cnt_q;
 
@@ -522,7 +536,7 @@ end
 // fsm
 
 assign fsm_invalid_next =  fsm_invalid_q & ~udp_axis_tvalid_i // first payload received
-						| ( fsm_msg_q | fsm_msg_len_align_q ) & ( msg_end & cnt_end_next );
+						| (( fsm_msg_q | fsm_msg_len_align_q | fsm_msg_len_split_q ) & ( msg_end & cnt_end_next ));
 // header 
 // hX  : header is received over multiple cycles 
 // msg : during last cycle part of the packed is the begining of the message
@@ -534,19 +548,22 @@ assign fsm_h2_msg_next = fsm_h1_q;
 // overlap : part of the next axi payload is of a different modludp64 message
 //           it will be routed to the free moldudp64 module
 assign fsm_msg_next = fsm_h2_msg_q 
-					| (fsm_msg_q & ~(msg_end & cnt_end_next) 
-						& ~( fsm_msg_len_split_next | fsm_msg_len_align_next| msg_len_in_flop_next  ))
+					| (fsm_msg_q 
+						& ~(msg_end & cnt_end_next) 
+						& ~( fsm_msg_len_split_next | fsm_msg_len_align_next| fsm_msg_len_flop_next  ))
 					| fsm_msg_len_split_q
 					| fsm_msg_len_align_q
-				    | fsm_msg_len_flop_q;
+				    |(fsm_msg_len_flop_q & ~msg_len_split_flop );
 
 // msg len split over 2 AXI payloads
-assign fsm_msg_len_split_next = fsm_msg_q & msg_end & ~cnt_end_next & msg_len_split;
+assign fsm_msg_len_split_next = ( msg_end & ~cnt_end_next ) & ( 
+							   ( fsm_msg_q & msg_len_split )
+							  |( fsm_msg_len_flop_q & msg_len_split_flop ));
 // msg len missing : present in start of the next packet
 assign fsm_msg_len_align_next = fsm_msg_q & ~udp_axis_tlast_q & msg_end_align;
 //assign fsm_msg_len_align_next = fsm_msg_q & ~|msg_cnt_dec & msg_end_align;
 // msg len is stored in flop
-assign fsm_msg_len_flop_next = fsm_msg_q & ~cnt_end_next & msg_len_in_flop_next;  
+assign fsm_msg_len_flop_next = fsm_msg_q & ~udp_axis_tlast_q & msg_len_in_flop_next;  
 
 always @(posedge clk)
 begin
