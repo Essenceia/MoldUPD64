@@ -62,7 +62,7 @@ module moldudp64 #(
 
 	`ifdef MOLD_MSG_IDS	
 	output [SID_W-1:0]      mold_msg_sid_o,
-	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,// Mold message
+	output [SEQ_NUM_W-1:0]  mold_msg_seq_num_o,
 	`endif
 	`ifdef DEBUG_ID
 	// no input debug id as it is constructed out of the seq
