@@ -94,8 +94,7 @@ logic                 seq_msb_en;
 logic                 seq_lsb_en;
 logic                 seq_en;
 `else
-reg   [47:0]          seq_q;
-logic [47:0]          seq_next;
+reg   [63:16]         seq_q;
 `endif
 logic        init_sid_p0_v; 
 logic [15:0] init_sid_p0;

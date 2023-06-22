@@ -101,6 +101,12 @@ begin
 	/* payload 0 of msg 2 */
 	moldudp_msg_len = { 8'd11, 8'd0 };
 	udp_axis_tdata_i = { {12{4'hE}} , moldudp_msg_len};
+
+	if ( udp_axis_tready_o == 1'b0 ) begin
+		udp_axis_tvalid_i = 1'b0;
+		#10
+		udp_axis_tvalid_i = 1'b1;
+	end	
 	#10
 	/* payload 1 of msg 2 */
 	udp_axis_tdata_i = {'X ,8'hAB ,{8{4'hF}}};
@@ -178,7 +184,9 @@ moldudp64 #(
 // xchecks
 always @(posedge clk) begin
 	if ( nreset ) begin
+		`ifdef HEARTBEAT
 		assert( ~$isunknown(flatlined_v_o));
+		`endif
 		assert( ~$isunknown(mold_msg_v_o ));
 		if ( mold_msg_v_o ) begin
 			assert( ~$isunknown(mold_msg_start_o));
