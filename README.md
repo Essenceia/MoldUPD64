@@ -5,6 +5,10 @@ as well as a small test bench.
 
 This is designed as part of a larger NASDAQ HFT hardware project.
 
+Note : The current implementation applies backpressure stalling the axi stream input
+    data for 1 cycle at a time. The plan is to remove this in the second version of the
+    mold module.
+
 ## Packet view
 
 This code takes as input an AXI stream of the UPD payload and decapsulates the
@@ -101,7 +105,7 @@ Input :
 Output :
 
 - `tready` : indicates that the slave can accept a transfer in the
-    current cycle
+    current cycle. 
 
 ### ( Optional ) Missing message detection
 
