@@ -17,7 +17,7 @@ cnt_ones_thermo : cnt_ones_thermo.v
 	iverilog ${FLAGS} -s cnt_ones_thermo -o ${BUILD}/cnt_ones_thermo cnt_ones_thermo.v
 
 dispatch: dispatch.v
-	iverilog ${FLAGS} -s dispatch -o ${BUILD}/dispatch dispatch.v 
+	iverilog ${FLAGS} -s dispatch -o ${BUILD}/dispatch cnt_ones_thermo.v dispatch.v 
 
 countdown: countdown.v
 	iverilog ${FLAGS} -s countdown -o ${BUILD}/countdown countdown.v

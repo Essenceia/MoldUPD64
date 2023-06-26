@@ -8,7 +8,7 @@
 // Count the number of 1s in the thermometer data_i
 module cnt_ones_thermo #(
 	parameter D_W = 8,
-	parameter D_LW = 3+1 // clog2( D_W ) + 1
+	parameter D_LW = 3//$clog2( D_W ) + 1
 )(
 	input  [D_W-1:0]  data_i,
 	output logic [D_LW-1:0] cnt_o
