@@ -12,6 +12,9 @@ module dispatch #(
 	parameter KEEP_LW    = 3,//$ceil(AXI_KEEP_W) + 1,
 
 	parameter LEN_W = 16,// length field
+
+	parameter HEADER_DATA_OFF = 6,
+
 	// number of dispatch outputs
 	parameter OUT   = 2
 )(
@@ -31,6 +34,8 @@ module dispatch #(
 	output [OUT*AXI_DATA_W-1:0] pipe_data_o,
 	output [OUT*KEEP_LW-1:0]    pipe_len_o
 );
+localparam SEL_DATA_SHIFT_MAX = LEN_W/8;
+localparam HEADER_DATA_LEN    = AXI_KEEP_W - HEADER_DATA_OFF; 
 // received bytes
 logic [AXI_KEEP_W-1:0] pipe_keep[OUT-1:0];
 // transmitted bytes
@@ -48,6 +53,7 @@ reg   fsm_len_split_q;
 // selector of primary pipe to drive data to
 logic [OUT-1:0] pipe_sel_next;
 reg   [OUT-1:0] pipe_sel_q;
+logic           pipe_sel_en;
 
 // remaining bytes to be got
 logic [LEN_W-1:0] pipe_msg_tx_len[OUT-1:0];
@@ -62,10 +68,11 @@ logic [LEN_W-1:0]   pipe_sel_msg_len_dec;
 logic [LEN_W-1:0]   pipe_sel_msg_len_next;
 logic [KEEP_LW-1:0] data_len;
 
+assign pipe_sel_en = ~fsm_invalid_q;
 always @(posedge clk) begin
 	if ( ~nreset ) begin
 		pipe_sel_q <= 'd1;
-	end else begin
+	end if ( pipe_sel_en ) begin
 		pipe_sel_q <= pipe_sel_next;
 	end
 end
@@ -76,8 +83,9 @@ m_axis_cnt_ones_thermo(
 	.data_i(keep_i),
 	.cnt_o(data_len)
 );*/
-assign data_len = pipe_sel_msg_end ? pipe_sel_msg_len_q : AXI_KEEP_W; 
-assign pipe_sel_msg_end = ~pipe_sel_msg_len_q[LEN_W-1:KEEP_LW] & ( pipe_sel_msg_len_q[KEEP_LW-1:0] <= AXI_KEEP_W );
+assign data_len = pipe_sel_msg_end ? pipe_sel_msg_len_q : 
+				( valid_i & init_v_i )? HEADER_DATA_LEN :  AXI_KEEP_W; 
+assign pipe_sel_msg_end = ~pipe_sel_msg_len_q[LEN_W-1:KEEP_LW] & ( pipe_sel_msg_len_q[KEEP_LW-1:0] <= AXI_KEEP_W ) & ~init_v_i;
 assign pipe_sel_msg_len_dec = pipe_sel_msg_len_q - data_len;
 // check if msg end overlaps with the same pl with the begining of the
 // next message.
@@ -94,7 +102,7 @@ logic               msg_len_align;
 logic               msg_len_align_end;
 logic               msg_len_inner;
 
-assign pload_overlap_v   = valid_i & msg_len_inner;
+assign pload_overlap_v   = valid_i & msg_len_inner & pipe_sel_msg_end;
 assign pload_overlap_len = data_len - pipe_sel_msg_len_q[KEEP_LW-1:0];
 
 assign { pipe_sel_len_inc2_overflow , pipe_sel_len_inc2 } = pipe_sel_msg_len_q[KEEP_LW-1:0] + 'd2;
@@ -110,8 +118,8 @@ assign msg_len_align_end = ( data_len == pipe_sel_len_inc2 ) & ~pipe_sel_len_inc
 // we should re-route the begining of the next message into the next 
 // output
 if ( OUT == 2 ) begin
-	assign pipe_sel_next[0] = pload_overlap_v ? ~pipe_sel_next[1] : pipe_sel_next[1]; 
-	assign pipe_sel_next[1] = pload_overlap_v ? ~pipe_sel_next[0] : pipe_sel_next[0];
+	assign pipe_sel_next[0] = pload_overlap_v ? ~pipe_sel_q[0] : pipe_sel_q[0]; 
+	assign pipe_sel_next[1] = pload_overlap_v ? ~pipe_sel_q[1] : pipe_sel_q[1];
 end else begin
 // not supported yet
 end
@@ -133,7 +141,11 @@ assign init_len   = {LEN_W{init_v_i}}  & ( { data_i[39:32] , data_i[47:40] } - '
 assign pipe_sel_msg_len_next = init_len_v ? init_len : 
 							   pipe_sel_msg_end ? 'd0 : ( pipe_sel_msg_len_q - 'd8 );
 always @(posedge clk) begin
-	pipe_sel_msg_len_q <= pipe_sel_msg_len_next;
+	if ( ~nreset ) begin
+		pipe_sel_msg_len_q <= '0;
+	end else begin
+		pipe_sel_msg_len_q <= pipe_sel_msg_len_next;
+	end
 end
 // get length bytes
 // will discard shift indexes covered by fsm states:
@@ -184,7 +196,8 @@ logic [AXI_DATA_W-1:0] data_shifted_arr[AXI_KEEP_W-1:0];
 
 // shift of 0 for other cases
 assign sel_data_shift = {KEEP_LW{fsm_len_split_q}} & 'd1
-					  | {KEEP_LW{fsm_len_align_q}} & 'd2; 
+					  | {KEEP_LW{fsm_len_align_q}} & 'd2
+					  | {KEEP_LW{valid_i & init_v_i}} & HEADER_DATA_OFF; 
 assign new_data_shift = pipe_sel_len_inc2;
 
 generate
@@ -193,24 +206,33 @@ for ( s = 0; s < AXI_KEEP_W; s++ ) begin
 end
 endgenerate
 always_comb begin
+	for(int i=0; i<SEL_DATA_SHIFT_MAX ; i++) begin
+		if( sel_data_shift == i ) sel_data_shifted = data_shifted_arr[i];
+	end 
+	if ( sel_data_shift == HEADER_DATA_OFF ) sel_data_shifted = data_shifted_arr[HEADER_DATA_OFF];
 	for(int i=0; i< AXI_KEEP_W; i++) begin
-		if( sel_data_shift == i ) sel_data_shifted = data_shifted_arr[i]; 
 		if( new_data_shift == i ) new_data_shifted = data_shifted_arr[i]; 
 	end
 end
+// pipe output valid
+logic pipe_sel_valid;
+logic pipe_new_valid;
+assign pipe_sel_valid = ( ~fsm_invalid_q | init_v_i ) & valid_i; 
+assign pipe_new_valid = ~fsm_invalid_q & pload_overlap_v & valid_i;
+
 // new msg start
 logic pipe_sel_data_start;
 logic pipe_new_data_start;
 assign pipe_sel_data_start = ( fsm_len_split_q | fsm_len_align_q | init_v_i ) & ( valid_i & ~last_i);
-assign pipe_new_data_start = pload_overlap_v & ~last_i;
+assign pipe_new_data_start = ~fsm_invalid_q & pload_overlap_v & valid_i & ~last_i;
 
 // drive output pipes
 generate 
 	for ( s = 0; s < OUT; s++ ) begin
-		assign pipe_valid_o[s] = valid_i & ( pipe_sel_q[s] | pload_overlap_v );
+		assign pipe_valid_o[s] = pipe_sel_q[s]? pipe_sel_valid : pipe_new_valid;
 		assign pipe_start_o[s] = pipe_sel_q[s]? pipe_sel_data_start : pipe_new_data_start;
-		assign pipe_data_o[s]  = pipe_sel_q[s]? sel_data_shifted : new_data_shifted;
-		assign pipe_len_o[s]   = pipe_sel_q[s]? pipe_sel_data_len : pipe_new_data_len;
+		assign pipe_data_o[s*AXI_DATA_W+AXI_DATA_W-1:s*AXI_DATA_W] = pipe_sel_q[s]? sel_data_shifted : new_data_shifted;
+		assign pipe_len_o[s*KEEP_LW+KEEP_LW-1:s*KEEP_LW]           = pipe_sel_q[s]? pipe_sel_data_len : pipe_new_data_len;
 	end
 endgenerate
 
@@ -238,7 +260,35 @@ always @(posedge clk) begin
 		fsm_len_align_q <= fsm_len_align_next;
 		fsm_len_split_q <= fsm_len_split_next;
 	end
-end 
+end
+`ifdef DEBUG_STRUCT
+// debug structures
+typedef struct
+{
+	logic                  start;
+	logic [KEEP_LW-1:0]    len;
+	logic [AXI_DATA_W-1:0] data;
+} m_db_disp_pipe_state_t;
+typedef struct
+{
+	logic [OUT-1:0] valid;
+	m_db_disp_pipe_state_t [OUT-1:0] pipe;
+	
+} m_db_disp_pipe_t;
+
+m_db_disp_pipe_t db_pipe_o;
+m_db_disp_pipe_state_t [OUT-1:0] db_pipe_state;
+generate
+	for( s=0; s<OUT; s++) begin
+		assign db_pipe_o.valid[s]     = pipe_valid_o[s]; 
+		assign db_pipe_o.pipe[s]      = db_pipe_state[s]; 
+		assign db_pipe_state[s].start = pipe_start_o[s]; 
+		assign db_pipe_state[s].len   = pipe_len_o[s*KEEP_LW+KEEP_LW-1:s*KEEP_LW]; 
+		assign db_pipe_state[s].data  = pipe_data_o[s*AXI_DATA_W+AXI_DATA_W-1:s*AXI_DATA_W]; 
+	end 
+endgenerate
+`endif 
+
 `ifdef FORMAL
 logic [3:0] f_fsm;
 assign f_fsm = { fsm_invalid_q, fsm_msg_q, fsm_len_align_q, fsm_len_split_q };
@@ -247,7 +297,14 @@ initial begin
 	a_reset : assume( ~nreset );
 end
 always @(posedge clk) begin
-	sva_fsm_onehot : assert( $onehot(f_fsm)); 
+	sva_fsm_onehot : assert( $onehot(f_fsm));
+
+	// xcheck
+	for(int i=0; i< OUT; i++) begin
+		xcheck_valid_o : assert( ~$isunknown(pipe_valid_o[i])); 
+		xcheck_start_o : assert(~pipe_valid_o[i] | pipe_valid_o[i] & ~$isunknown(pipe_start_o[i])); 
+		xcheck_len_o   : assert(~pipe_valid_o[i] | pipe_valid_o[i] & ~$isunknown(pipe_len_o[i])); 
+	end
 end
 `endif
 endmodule
