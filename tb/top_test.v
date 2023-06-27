@@ -1,12 +1,13 @@
 
 parameter AXI_DATA_W = 64;
 parameter AXI_KEEP_W = AXI_DATA_W/8;
+parameter KEEP_LW = $clog2(AXI_KEEP_W) + 1;
 parameter LEN   = 8;
 parameter ML_W  = 2*LEN;
 parameter SID_W = 10*LEN;// session id
 parameter SEQ_NUM_W = 8*LEN; // sequence number
 parameter MH_W  = 20*LEN;// header 
-
+parameter ITCH_N = 2;
 `ifdef DEBUG_ID
 parameter DEBUG_ID_W = SEQ_NUM_W + SID_W;
 `endif
@@ -24,10 +25,10 @@ logic                  udp_axis_tlast_i;
 logic                  udp_axis_tuser_i;
 logic                  udp_axis_tready_o;
 
-logic                  mold_msg_v_o;
-logic                  mold_msg_start_o;
-logic [AXI_KEEP_W-1:0] mold_msg_mask_o;
-logic [AXI_DATA_W-1:0] mold_msg_data_o;
+logic [ITCH_N-1:0]             mold_msg_v_o;
+logic [ITCH_N-1:0]             mold_msg_start_o;
+logic [ITCH_N*KEEP_LW-1:0]     mold_msg_len_o;
+logic [ITCH_N*AXI_DATA_W-1:0]  mold_msg_data_o;
 
 `ifdef DEBUG_ID
 logic [DEBUG_ID_W-1:0] mold_msg_debug_id_o;
@@ -102,11 +103,6 @@ begin
 	moldudp_msg_len = { 8'd11, 8'd0 };
 	udp_axis_tdata_i = { {12{4'hE}} , moldudp_msg_len};
 
-	if ( udp_axis_tready_o == 1'b0 ) begin
-		udp_axis_tvalid_i = 1'b0;
-		#10
-		udp_axis_tvalid_i = 1'b1;
-	end	
 	#10
 	/* payload 1 of msg 2 */
 	udp_axis_tdata_i = {'X ,8'hAB ,{8{4'hF}}};
@@ -137,7 +133,8 @@ moldudp64 #(
 	.SID_W(SID_W),
 	.SEQ_NUM_W(SEQ_NUM_W),
 	.ML_W(ML_W),
-	.EOS_MSG_CNT(16'hffff)
+	.EOS_MSG_CNT(16'hffff),
+	.ITCH_N(ITCH_N)
 ) m_moldudp64(
 	.clk(clk),
 	.nreset(nreset),
@@ -177,7 +174,7 @@ moldudp64 #(
 	
 	.mold_msg_v_o    (mold_msg_v_o    ),
 	.mold_msg_start_o(mold_msg_start_o),
-	.mold_msg_mask_o (mold_msg_mask_o ),
+	.mold_msg_len_o (mold_msg_len_o ),
 	.mold_msg_data_o (mold_msg_data_o )
 
 );
@@ -190,7 +187,7 @@ always @(posedge clk) begin
 		assert( ~$isunknown(mold_msg_v_o ));
 		if ( mold_msg_v_o ) begin
 			assert( ~$isunknown(mold_msg_start_o));
-			assert( ~$isunknown(mold_msg_mask_o));
+			assert( ~$isunknown(mold_msg_len_o));
 			`ifdef MOLD_MSG_IDS
 			assert( ~$isunknown(mold_msg_seq_num_o));
 			assert( ~$isunknown(mold_msg_sid_o));
@@ -201,27 +198,29 @@ always @(posedge clk) begin
 			end
 	end
 end
-
-genvar i;
+/*
+genvar s,i;
 generate
-for( i = 0; i < AXI_KEEP_W; i++) begin
-	logic [7:0] masked_data;
-	assign masked_data ={8{mold_msg_mask_o[i] & mold_msg_v_o }} & mold_msg_data_o[8*i+7:8*i];
-	always @(posedge clk) begin
-		if ( nreset ) begin
-			assert( ~$isunknown( masked_data ));
-			`ifdef DEBUG
-			if ( $isunknown( masked_data )) begin
-				$display("%t i %d masked data %h, mask %d, data %h",
-					$time,i,masked_data, mold_msg_mask_o[i],
-					 mold_msg_data_o[8*i+7:8*i]);
+for( s = 0; s < ITCH_N; s++ ) begin
+	for( i = 0; i < AXI_KEEP_W; i++) begin
+		logic [7:0] masked_data;
+		assign masked_data ={8{ (mold_msg_len_o[s*KEEP_LW+KEEP_LW-1:s*KEEP_LW] >= i) & mold_msg_v_o[s] }} & mold_msg_data_o[s*AXI_DATA_W+8*i+7:s*AXI_DATA_W+8*i];
+		always @(posedge clk) begin
+			if ( nreset ) begin
+				assert( ~$isunknown( masked_data ));
+				`ifdef DEBUG
+				if ( $isunknown( masked_data )) begin
+					$display("%t i %d masked data %h, len %d, data %h",
+						$time,i,masked_data, mold_msg_len_o[s*KEEP_LW+KEEP_LW-1:s*KEEP_LW],
+						 mold_msg_data_o[s*AXI_DATA_W+8*i+7:s*AXI_DATA_W+8*i]);
+				end
+				`endif
 			end
-			`endif
 		end
+	
 	end
-
 end
 endgenerate
-
+*/
 
 endmodule

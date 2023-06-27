@@ -24,6 +24,8 @@ module dispatch #(
 	input                  init_v_i,
 	input                  last_i,
 
+	output                 msg_end_v_o,
+
 	output [OUT-1:0]            pipe_valid_o,
 	output [OUT-1:0]            pipe_start_o,
 	output [OUT*AXI_DATA_W-1:0] pipe_data_o,
@@ -74,8 +76,8 @@ m_axis_cnt_ones_thermo(
 	.data_i(keep_i),
 	.cnt_o(data_len)
 );*/
-assign data_len = AXI_KEEP_W; 
-assign pipe_sel_msg_end = ~pipe_sel_msg_len_q[LEN_W-1:KEEP_LW] & ( pipe_sel_msg_len_q[KEEP_LW-1:0] <= data_len );
+assign data_len = pipe_sel_msg_end ? pipe_sel_msg_len_q : AXI_KEEP_W; 
+assign pipe_sel_msg_end = ~pipe_sel_msg_len_q[LEN_W-1:KEEP_LW] & ( pipe_sel_msg_len_q[KEEP_LW-1:0] <= AXI_KEEP_W );
 assign pipe_sel_msg_len_dec = pipe_sel_msg_len_q - data_len;
 // check if msg end overlaps with the same pl with the begining of the
 // next message.
@@ -124,11 +126,15 @@ logic [7:0]         init_len_p0;
 
 assign init_len_v = valid_i & ( pipe_sel_msg_end | init_v_i );
 
-assign init_len   = {LEN_W{init_v_i}}  & { data_i[39:32] , data_i[47:40] }
+assign init_len   = {LEN_W{init_v_i}}  & ( { data_i[39:32] , data_i[47:40] } - 'd2 )
 				  | {LEN_W{fsm_msg_q}} & { init_len_p1, init_len_p0 }
 				  | {LEN_W{fsm_len_align_q }} & { data_i[7:0], data_i[15:8] }
 				  | {LEN_W{fsm_len_split_q }} & { init_len_split_half_q, data_i[7:0] };
-assign pipe_sel_msg_len_next = init_len_v ? init_len : ( pipe_
+assign pipe_sel_msg_len_next = init_len_v ? init_len : 
+							   pipe_sel_msg_end ? 'd0 : ( pipe_sel_msg_len_q - 'd8 );
+always @(posedge clk) begin
+	pipe_sel_msg_len_q <= pipe_sel_msg_len_next;
+end
 // get length bytes
 // will discard shift indexes covered by fsm states:
 //  0 : align
@@ -208,8 +214,9 @@ generate
 	end
 endgenerate
 
+assign msg_end_v_o = pipe_sel_msg_end & valid_i;
 // FSM
-assign fsm_invalid_next = fsm_invalid_q & ~valid_i 
+assign fsm_invalid_next = fsm_invalid_q & ~(valid_i& init_v_i) 
 						| valid_i & last_i;
 assign fsm_msg_next = (( valid_i & init_v_i ) // init
 				    | fsm_len_align_q 
