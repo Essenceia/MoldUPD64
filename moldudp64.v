@@ -28,9 +28,12 @@ module moldudp64 #(
 	parameter NUKE_ID_W   = 10,
 	`endif	
 	parameter ML_W        = 16, // Mold length field width in bits
-	parameter EOS_MSG_CNT = {ML_W{1'b1}}, // end-of-session msg cnt value
+	parameter EOS_MSG_CNT = {ML_W{1'b1}},// end-of-session msg cnt value
 
-	parameter ITCH_N      = 2//number of connected itch decoders
+	// overlap fields
+	parameter OV_DATA_W  = 64-ML_W,//48
+	parameter OV_KEEP_W  = (OV_DATA_W/8),//6
+	parameter OV_KEEP_LW = 3 //$clog2(OV_KEEP_W+1),
 )(
 	input clk,
 	input nreset,
@@ -71,12 +74,18 @@ module moldudp64 #(
 	`ifdef DEBUG_ID
 	// no input debug id as it is constructed out of the seq
 	// and sid numbers
-	output [DEBUG_ID_W-1:0] mold_msg_debug_id_o,
+	output [DEBUG_ID_W-1:0]  mold_msg_debug_id_o,
 	`endif
-	output [ITCH_N-1:0]             mold_msg_v_o,
-	output [ITCH_N-1:0]             mold_msg_start_o, // start of a new msg
-	output [ITCH_N*AXI_KEEP_LW-1:0] mold_msg_len_o,
-	output [ITCH_N*AXI_DATA_W-1:0]  mold_msg_data_o
+	output                   mold_msg_v_o,
+	output                   mold_msg_start_o, // start of a new msg
+	output [AXI_KEEP_LW-1:0] mold_msg_len_o,
+	output [AXI_DATA_W-1:0]  mold_msg_data_o, 
+
+	// overlap
+	output                   mold_msg_ov_v_o,
+	output                   mold_msg_ov_start_o, // start of a new msg
+	output [OV_KEEP_LW-1:0]  mold_msg_ov_len_o,
+	output [OV_DATA_W-1:0]   mold_msg_ov_data_o
 );
 localparam AXI_MSG_L   = $clog2( AXI_DATA_W / 8 );
 localparam AXI_KEEP_LW = $clog2( AXI_KEEP_W ) + 1;
@@ -250,7 +259,10 @@ dispatch #(
 	.AXI_KEEP_W(AXI_KEEP_W),
 	.KEEP_LW(AXI_KEEP_LW),
 	.LEN_W(ML_W),
-	.OUT(ITCH_N)
+	.OV_DATA_W(OV_DATA_W), 
+	.OV_KEEP_W(OV_KEEP_W),
+	.OV_KEEP_LW(OV_KEEP_LW),
+	.HEADER_DATA_OFF(6)
 ) m_mold_data_dispatch(
 	.clk(clk),
 	.nreset(nreset),
@@ -263,10 +275,15 @@ dispatch #(
 
 	.msg_end_v_o(msg_end_v),
 
-	.pipe_valid_o(mold_msg_v_o),
-	.pipe_start_o(mold_msg_start_o),
-	.pipe_data_o(mold_msg_data_o),
-	.pipe_len_o(mold_msg_len_o)
+	.valid_o(mold_msg_v_o),
+	.start_o(mold_msg_start_o),
+	.data_o(mold_msg_data_o),
+	.len_o(mold_msg_len_o),
+
+	.ov_valid_o(mold_msg_ov_v_o),
+	.ov_start_o(mold_msg_ov_start_o),
+	.ov_data_o (mold_msg_ov_data_o),
+	.ov_len_o  (mold_msg_ov_len_o)
 );
 // fsm
 logic tlast_q;

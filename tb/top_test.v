@@ -7,7 +7,11 @@ parameter ML_W  = 2*LEN;
 parameter SID_W = 10*LEN;// session id
 parameter SEQ_NUM_W = 8*LEN; // sequence number
 parameter MH_W  = 20*LEN;// header 
-parameter ITCH_N = 2;
+// overlap fields
+parameter OV_DATA_W  = 64-ML_W;//48
+parameter OV_KEEP_W  = (OV_DATA_W/8);//6
+parameter OV_KEEP_LW = 3; //$clog2(OV_KEEP_W+1),
+
 `ifdef DEBUG_ID
 parameter DEBUG_ID_W = SEQ_NUM_W + SID_W;
 `endif
@@ -25,10 +29,16 @@ logic                  udp_axis_tlast_i;
 logic                  udp_axis_tuser_i;
 logic                  udp_axis_tready_o;
 
-logic [ITCH_N-1:0]             mold_msg_v_o;
-logic [ITCH_N-1:0]             mold_msg_start_o;
-logic [ITCH_N*KEEP_LW-1:0]     mold_msg_len_o;
-logic [ITCH_N*AXI_DATA_W-1:0]  mold_msg_data_o;
+logic                  mold_msg_v_o;
+logic                  mold_msg_start_o;
+logic [KEEP_LW-1:0]    mold_msg_len_o;
+logic [AXI_DATA_W-1:0] mold_msg_data_o;
+
+logic                  mold_msg_ov_v_o;
+logic                  mold_msg_ov_start_o;
+logic [OV_KEEP_LW-1:0] mold_msg_ov_len_o;
+logic [OV_DATA_W-1:0]  mold_msg_ov_data_o;
+
 
 `ifdef DEBUG_ID
 logic [DEBUG_ID_W-1:0] mold_msg_debug_id_o;
@@ -77,7 +87,7 @@ begin
 	// header : seq num
 	moldudp_header[(SID_W+SEQ_NUM_W)-1:SID_W] = 64'hF0F0F0F0F0F0F0F0;
 	// header : msg cnt
-	moldudp_header[MH_W-1:MH_W-ML_W] = { 8'd3, 8'd0 };
+	moldudp_header[MH_W-1:MH_W-ML_W] = { 8'd5, 8'd0 };
 
 	moldudp_msg_len = { 8'd16, 8'd0 };
 	/* Header 0*/
@@ -104,9 +114,21 @@ begin
 	udp_axis_tdata_i = { {12{4'hE}} , moldudp_msg_len};
 
 	#10
-	/* payload 1 of msg 2 */
-	udp_axis_tdata_i = {'X ,8'hAB ,{8{4'hF}}};
-	udp_axis_tkeep_i = { '0, 4'b1111};
+	/* payload 1 of msg 2 
+ 	 * and payload 0 of msg 3 */
+	moldudp_msg_len = {8'd8, 8'd0 };
+	udp_axis_tdata_i = {8'haa, moldudp_msg_len ,8'hAB ,{8{4'hF}}};
+	#10
+	/* payload 1 of msg 3 
+ 	 * and payload 0 of msg 4 ( len split ) */
+	moldudp_msg_len = { 8'd10, 8'd0};
+	udp_axis_tdata_i = {moldudp_msg_len[7:0], {7{8'hBF}}};
+	#10
+	/* payload 1 of msg 4, split len second part */
+	udp_axis_tdata_i = { {7{8'hbb}} , moldudp_msg_len[15:8] };
+	#10
+	udp_axis_tdata_i = { {40{1'bx}} , {3{8'hcc}} };
+	udp_axis_tkeep_i = {5'b00000, 3'b111};
 	udp_axis_tlast_i = 1'b1;
 	#10
 	/* no msg */
@@ -133,8 +155,7 @@ moldudp64 #(
 	.SID_W(SID_W),
 	.SEQ_NUM_W(SEQ_NUM_W),
 	.ML_W(ML_W),
-	.EOS_MSG_CNT(16'hffff),
-	.ITCH_N(ITCH_N)
+	.EOS_MSG_CNT(16'hffff)
 ) m_moldudp64(
 	.clk(clk),
 	.nreset(nreset),
@@ -174,9 +195,13 @@ moldudp64 #(
 	
 	.mold_msg_v_o    (mold_msg_v_o    ),
 	.mold_msg_start_o(mold_msg_start_o),
-	.mold_msg_len_o (mold_msg_len_o ),
-	.mold_msg_data_o (mold_msg_data_o )
+	.mold_msg_len_o  (mold_msg_len_o  ),
+	.mold_msg_data_o (mold_msg_data_o ),
 
+	.mold_msg_ov_v_o    (mold_msg_ov_v_o    ),
+	.mold_msg_ov_start_o(mold_msg_ov_start_o),
+	.mold_msg_ov_len_o  (mold_msg_ov_len_o ),
+	.mold_msg_ov_data_o (mold_msg_ov_data_o )
 );
 // xchecks
 always @(posedge clk) begin
