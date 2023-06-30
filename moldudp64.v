@@ -98,6 +98,7 @@ reg   [SID_W-1:0]     sid_q;
 logic [SID_W-1:0]     sid_next;
 
 `ifdef _INC_MOLD_IDS
+reg   [SEQ_NUM_W-1:0] seq;
 reg   [SEQ_NUM_W-1:0] seq_q;
 logic [SEQ_NUM_W-1:0] seq_next;
 logic [SEQ_NUM_W-1:0] seq_add;
@@ -172,6 +173,8 @@ end
 assign { seq_add_overflow, seq_add } = seq_q + {{SEQ_NUM_W-1{1'b0}}, 1'b1};
 assign seq_next[15:0]  = init_seq_num_p0_v ? init_seq_num_p0 : seq_add[15:0];
 assign seq_next[63:16] = init_seq_num_p1_v ? init_seq_num_p1 : seq_add[63:16];
+// recreate seq on init cycle
+assign seq = { seq_q[63:16] , init_seq_num_p0_v? init_seq_num_p0 : seq_q[15:0] }; 
 
 assign seq_en     = msg_end_v;
 assign seq_msb_en = seq_en | init_seq_num_p1_v;
@@ -320,11 +323,11 @@ assign udp_axis_tready_o  = 1'b1; // no backpresure
 
 `ifdef MOLD_MSG_IDS
 assign mold_msg_sid_o     = sid_q;
-assign mold_msg_seq_num_o = seq_q;
+assign mold_msg_seq_num_o = seq;
 `endif
 
 `ifdef DEBUG_ID
-assign mold_msg_debug_id_o = { sid_q , seq_q };
+assign mold_msg_debug_id_o = { sid_q , seq };
 `endif
 
 `ifdef FORMAL
