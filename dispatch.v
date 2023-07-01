@@ -39,7 +39,6 @@ module dispatch #(
 	output [KEEP_LW-1:0]    len_o,
 
 	output                  ov_valid_o,
-	output                  ov_start_o,
 	output [OV_DATA_W-1:0]  ov_data_o,
 	output [OV_KEEP_LW-1:0] ov_len_o
 );
@@ -67,7 +66,7 @@ logic [KEEP_LW-1:0] data_len;
 // recieved data length
 assign data_len = sel_msg_end ? sel_msg_len_q : 
 				( valid_i & init_v_i )? HEADER_DATA_LEN :  AXI_KEEP_W; 
-assign sel_msg_end = ~sel_msg_len_q[LEN_W-1:KEEP_LW] & ( sel_msg_len_q[KEEP_LW-1:0] <= AXI_KEEP_W ) & ~init_v_i;
+assign sel_msg_end = ~|sel_msg_len_q[LEN_W-1:KEEP_LW] & ( sel_msg_len_q[KEEP_LW-1:0] <= AXI_KEEP_W ) & ~init_v_i;
 assign sel_msg_len_dec = sel_msg_len_q - data_len;
 // check if msg end overlaps with the same pl with the begining of the
 // next message.
@@ -130,18 +129,18 @@ end
 //  1 : split
 //  KEEP_W-1 : split
 logic [KEEP_LW-1:0] len_shift;
-logic [LEN_W-1:0]  len_shifted_arr[AXI_KEEP_W-2:2];
+logic [LEN_W-1:0]  len_shifted_arr[AXI_KEEP_W-2:1];
 logic [LEN_W-1:0]  len_shifted;
 
 assign len_shift = sel_msg_len_q[KEEP_LW-1:0];
 genvar s;
 generate
-for ( s = 2; s < AXI_KEEP_W-1; s++ ) begin
+for ( s = 1; s < AXI_KEEP_W-1; s++ ) begin
 	assign len_shifted_arr[s] = data_i[s*8 + LEN_W-1: s*8];
 end
 endgenerate
 always_comb begin
-	for(int i=2; i< AXI_KEEP_W-1; i++) begin
+	for(int i=1; i< AXI_KEEP_W-1; i++) begin
 		if( len_shift == i ) len_shifted = len_shifted_arr[i]; 
 	end
 end
@@ -189,7 +188,7 @@ for ( s = 0; s < AXI_KEEP_W; s++ ) begin
 end
 endgenerate
 always_comb begin
-	for(int i=0; i<SEL_DATA_SHIFT_MAX ; i++) begin
+	for(int i=0; i<=SEL_DATA_SHIFT_MAX ; i++) begin
 		if( sel_data_shift == i ) sel_data_shifted = data_shifted_arr[i];
 	end 
 	if ( sel_data_shift == HEADER_DATA_OFF ) sel_data_shifted = data_shifted_arr[HEADER_DATA_OFF];
@@ -205,28 +204,31 @@ assign ov_valid = ~fsm_invalid_q & pload_overlap_v & valid_i & ~last_i;
 
 // ov msg start
 logic sel_data_start;
-logic ov_data_start;
-assign sel_data_start = fsm_len_split_q | fsm_len_align_q | init_v_i;
-assign ov_data_start = 1'b1; // overlap issues allways occure on the start of the packet
+reg   msg_len_align_end_q;
+logic msg_len_align_end_next;
+assign msg_len_align_end_next = msg_len_align_end & sel_msg_end & fsm_msg_q;
+always @(posedge clk) begin
+	msg_len_align_end_q	 <= msg_len_align_end_next;
+end
+assign sel_data_start = (fsm_len_split_q | fsm_len_align_q | msg_len_align_end_q | init_v_i) & ~last_i;
 
 // drive output pipes
 assign valid_o    = sel_valid;
 assign ov_valid_o = ov_valid;
 assign start_o    = sel_data_start;
-assign ov_start_o = ov_data_start;
 assign data_o     = sel_data_shifted;
 assign ov_data_o  = ov_data_shifted;
 assign len_o      = sel_data_len;
 assign ov_len_o   = ov_data_len;
 
-assign msg_end_v_o = sel_msg_end & valid_i;
+assign msg_end_v_o = ( sel_msg_end & ~(fsm_len_split_q|fsm_len_align_q) ) & valid_i;
 // FSM
 assign fsm_invalid_next = fsm_invalid_q & ~(valid_i& init_v_i) 
 						| valid_i & last_i;
 assign fsm_msg_next = (( valid_i & init_v_i ) // init
 				    | fsm_len_align_q 
 					| fsm_len_split_q
-					| fsm_msg_q & ~( fsm_len_split_next | fsm_len_align_next)
+					| fsm_msg_q & ~( fsm_len_split_next | fsm_len_align_next | last_i)
 					) & ~( valid_i & last_i );
 assign fsm_len_align_next = fsm_msg_q & sel_msg_end & msg_len_align; 
 assign fsm_len_split_next = fsm_msg_q & sel_msg_end & msg_len_split; 
@@ -259,7 +261,6 @@ always @(posedge clk) begin
 	xcheck_start_o : assert(~valid_o | valid_o & ~$isunknown(start_o)); 
 	xcheck_len_o   : assert(~valid_o | valid_o & ~$isunknown(len_o)); 
 	xcheck_ov_valid_o : assert( ~$isunknown(ov_valid_o)); 
-	xcheck_ov_start_o : assert(~ov_valid_o | ov_valid_o & ~$isunknown(ov_start_o)); 
 	xcheck_ov_len_o   : assert(~ov_valid_o | ov_valid_o & ~$isunknown(ov_len_o)); 	
 end
 `endif
