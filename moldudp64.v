@@ -83,7 +83,6 @@ module moldudp64 #(
 
 	// overlap
 	output                   mold_msg_ov_v_o,
-	output                   mold_msg_ov_start_o, // start of a new msg
 	output [OV_KEEP_LW-1:0]  mold_msg_ov_len_o,
 	output [OV_DATA_W-1:0]   mold_msg_ov_data_o
 );
@@ -284,7 +283,6 @@ dispatch #(
 	.len_o(mold_msg_len_o),
 
 	.ov_valid_o(mold_msg_ov_v_o),
-	.ov_start_o(mold_msg_ov_start_o),
 	.ov_data_o (mold_msg_ov_data_o),
 	.ov_len_o  (mold_msg_ov_len_o)
 );
