@@ -29,8 +29,16 @@ module moldudp64 #(
 	`ifdef DEBUG_ID
 	parameter DEBUG_ID_W  = SID_W + SEQ_NUM_W,
 	`endif	
+	`ifdef NUKE
+	parameter NUKE_ID_W   = 10,
+	`endif	
 	parameter ML_W        = 16, // Mold length field width in bits
-	parameter EOS_MSG_CNT = {ML_W{1'b1}} // end-of-session msg cnt value
+	parameter EOS_MSG_CNT = {ML_W{1'b1}},// end-of-session msg cnt value
+
+	// overlap fields
+	parameter OV_DATA_W  = 64-ML_W,//48
+	parameter OV_KEEP_W  = (OV_DATA_W/8),//6
+	parameter OV_KEEP_LW = 3 //$clog2(OV_KEEP_W+1),
 )(
 	input clk,
 	input nreset,
@@ -71,12 +79,17 @@ module moldudp64 #(
 	`ifdef DEBUG_ID
 	// no input debug id as it is constructed out of the seq
 	// and sid numbers
-	output [DEBUG_ID_W-1:0] mold_msg_debug_id_o,
+	output [DEBUG_ID_W-1:0]  mold_msg_debug_id_o,
 	`endif
-	output                  mold_msg_v_o,
-	output                  mold_msg_start_o, // start of a new msg
-	output [AXI_KEEP_W-1:0] mold_msg_mask_o,
-	output [AXI_DATA_W-1:0] mold_msg_data_o
+	output                   mold_msg_v_o,
+	output                   mold_msg_start_o
+,	output [AXI_KEEP_LW-1:0] mold_msg_len_o,
+	output [AXI_DATA_W-1:0]  mold_msg_data_o, 
+
+	// overlap
+	output                   mold_msg_ov_v_o,
+	output [OV_KEEP_LW-1:0]  mold_msg_ov_len_o,
+	output [OV_DATA_W-1:0]   mold_msg_ov_data_o
 );
 ```
 
@@ -180,18 +193,6 @@ Extracted mold message contained in the mold packet.
 This message data is driven in order and aligned on 8 bytes
 with no bubbles in the data. 
 
-Illustration: Let X represent a mold message byte and `_` a none
-message byte, for instance the 2 byte mold message length field.
-```
-input ( MSB - LSB )
-t(y)   : XXXXXX__ 
-t(y+1) : __XXXXXX  
-
-output ( MSB - LSB )
-t(x)   : XXXXXXXX 
-t(x+1) : ____XXXX
-```
-
 This is to be connected to the itch decoder.
 
 
@@ -200,13 +201,23 @@ This is to be connected to the itch decoder.
 
 - `mold_msg_start_o` : currently the of a new mold message.
 
-- `mold_msg_mask_o` : is the byte qualifier that indicates whether
-    the content of the associated byte of `mold_msg_data_o` is 
-    to be processed as part of mold message. Currently not used in itch
-    decoder as message length is fixed according to itch message type.
+- `mold_msg_len_o` : is the length in bytes of the valid data on `mold_msg_data_o`.
 
 - `mold_msg_data_o` : 8 byte aligned mold message data.
  
+### Overlap mold message data
+
+We define an overlap as the case where the end of a mold message and the first part of 
+a new mold message's data are present on the same AXI payload. The new message's data bytes
+will be transfered on these overlap signals.
+[More information](https://github.com/Essenceia/ITCH#example)
+
+- `mold_msg_ov_v_o` : validity bit, overlap data present.
+
+- `mold_msg_ov_len_o` : length in bytes of the data.
+
+- `mold_msg_ov_data_o` : overlap message data, 6 byte aligned
+
 ## Limitations
 
 - Mold messages must be at least 6 bytes long.
