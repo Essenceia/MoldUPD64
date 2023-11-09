@@ -35,7 +35,6 @@ logic [KEEP_LW-1:0]    mold_msg_len_o;
 logic [AXI_DATA_W-1:0] mold_msg_data_o;
 
 logic                  mold_msg_ov_v_o;
-logic                  mold_msg_ov_start_o;
 logic [OV_KEEP_LW-1:0] mold_msg_ov_len_o;
 logic [OV_DATA_W-1:0]  mold_msg_ov_data_o;
 
@@ -66,7 +65,7 @@ logic flatlined_v_o;
 `endif
 initial
 begin
-	$dumpfile("build/wave.vcd"); // create a VCD waveform dump called "wave.vcd"
+	$dumpfile("wave/moldudp64_tb.vcd"); // create a VCD waveform dump called "wave.vcd"
     $dumpvars(0, moldudp64_tb);
 	$display("Test start");
 	udp_axis_tvalid_i = 1'b0;
@@ -199,7 +198,6 @@ moldudp64 #(
 	.mold_msg_data_o (mold_msg_data_o ),
 
 	.mold_msg_ov_v_o    (mold_msg_ov_v_o    ),
-	.mold_msg_ov_start_o(mold_msg_ov_start_o),
 	.mold_msg_ov_len_o  (mold_msg_ov_len_o ),
 	.mold_msg_ov_data_o (mold_msg_ov_data_o )
 );

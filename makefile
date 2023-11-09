@@ -41,8 +41,8 @@ moldudp64: moldudp64.v dispatch.v cnt_ones_thermo header len_to_mask miss_msg_de
 	iverilog ${FLAGS} -s moldudp64 ${DEFINES} -o ${BUILD}/moldudp64 cnt_ones_thermo.v countdown.v len_to_mask.v endian_flip.v header.v miss_msg_det.v dispatch.v moldudp64.v
 
 
-tb: moldudp64.v ${TB_DIR}/top_test.v dispatch.v cnt_ones_thermo header len_to_mask miss_msg_det countdown endian_flip
-	iverilog ${FLAGS} -s moldudp64_tb ${DEFINES} -o ${BUILD}/tb cnt_ones_thermo.v countdown.v len_to_mask.v endian_flip.v header.v miss_msg_det.v dispatch.v moldudp64.v  ${TB_DIR}/top_test.v
+tb: moldudp64.v ${TB_DIR}/moldudp64_tb.v dispatch.v cnt_ones_thermo header len_to_mask miss_msg_det countdown endian_flip
+	iverilog ${FLAGS} -s moldudp64_tb ${DEFINES} -o ${BUILD}/tb cnt_ones_thermo.v countdown.v len_to_mask.v endian_flip.v header.v miss_msg_det.v dispatch.v moldudp64.v  ${TB_DIR}/moldudp64_tb.v
 
 
 lib:top
