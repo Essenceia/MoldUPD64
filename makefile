@@ -7,7 +7,6 @@ BUILD=build
 CONF=conf
 FLAGS=-Wall -g2012 -gassertions -gstrict-expr-width
 DEFINES=-DMISS_DET -DHEARTBEAT -DMOLD_MSG_IDS $(if $(debug),-DDEBUG -DDEBUG_ID)
-IMPLEM_DEFINES=
 WAVE_FILE=wave.vcd
 VIEW=gtkwave
 WAVE_CONF=wave.conf
@@ -45,18 +44,13 @@ moldudp64: moldudp64.v dispatch.v cnt_ones_thermo header len_to_mask miss_msg_de
 tb: moldudp64.v ${TB_DIR}/top_test.v dispatch.v cnt_ones_thermo header len_to_mask miss_msg_det countdown endian_flip
 	iverilog ${FLAGS} -s moldudp64_tb ${DEFINES} -o ${BUILD}/tb cnt_ones_thermo.v countdown.v len_to_mask.v endian_flip.v header.v miss_msg_det.v dispatch.v moldudp64.v  ${TB_DIR}/top_test.v
 
-implem_tb: moldudp64.v ${TB_DIR}/top_test.v cnt_ones_thermo header len_to_mask miss_msg_det countdown endian_flip
-	iverilog ${FLAGS} -s moldudp64_tb ${IMPLEM_DEFINES} -o ${BUILD}/implem_tb cnt_ones_thermo.v countdown.v len_to_mask.v endian_flip.v header.v miss_msg_det.v moldudp64.v  ${TB_DIR}/top_test.v
-
 
 lib:top
 	echo "TODO"
 
 run: tb
+	mkdir -p wave
 	vvp ${BUILD}/tb
-
-run_implem_tb: implem_tb
-	vvp ${BUILD}/implem_tb
 
 wave: run
 	${VIEW} ${BUILD}/${WAVE_FILE} ${CONF}/${WAVE_CONF}
