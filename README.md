@@ -5,9 +5,7 @@ as well as a small test bench.
 
 This is designed as part of a larger NASDAQ HFT hardware project.
 
-Note : The current implementation applies backpressure stalling the axi stream input
-    data for 1 cycle at a time. The plan is to remove this in the second version of the
-    mold module.
+Note: Support for detecting missing messages hasn't been fully added yet.
 
 ## Packet view
 
